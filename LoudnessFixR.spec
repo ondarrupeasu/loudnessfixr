@@ -32,7 +32,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='AudioLoudnessToolkit',
+    name='LoudnessFixR',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -51,13 +51,16 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='AudioLoudnessToolkit',
+    name='LoudnessFixR',
 )
 if sys.platform == 'darwin':
     app = BUNDLE(
         coll,
-        name='AudioLoudnessToolkit.app',
-        icon=None,
+        name='LoudnessFixR.app',
+        icon='design/LoudnessFixR.icns',
+        # NO cambiar: de este id cuelgan las preferencias del usuario
+        # (~/Library/Preferences/es.cinemafilmak.audioloudnesstoolkit.plist).
+        # El rebrand a LoudnessFixR es solo visible; el id interno se mantiene.
         bundle_identifier='es.cinemafilmak.audioloudnesstoolkit',
         info_plist={
             'NSHighResolutionCapable': True,
