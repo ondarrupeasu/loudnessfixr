@@ -7,10 +7,10 @@ QWidget { background: #16181a; color: #e7e5df; font-size: 12px; }
 QGroupBox { border: 1px solid #383c40; border-radius: 8px; margin-top: 8px; padding-top: 12px; font-weight: bold; }
 QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }
 QPushButton { background: #26292d; border: 1px solid #383c40; border-radius: 4px; padding: 4px 8px; }
-QPushButton:hover { border-color: #e0392b; }
+QPushButton:hover { border-color: #ff5a4d; }
 QPushButton:disabled { color: #5a5854; }
-QPushButton#Primary { background: #e0392b; border: 1px solid #e0392b; color: #1a0605; font-weight: bold; }
-QPushButton#Primary:hover { background: #ec564a; border-color: #ec564a; }
+QPushButton#Primary { background: #ff5a4d; border: 1px solid #ff5a4d; color: #14060a; font-weight: bold; }
+QPushButton#Primary:hover { background: #ff7d72; border-color: #ff7d72; }
 QPushButton#Primary:disabled { background: #3a2320; border-color: #3a2320; color: #7a6a66; }
 QLineEdit, QComboBox, QDoubleSpinBox, QTableWidget { background: #26292d; border: 1px solid #383c40; border-radius: 4px; padding: 2px 4px; }
 QDoubleSpinBox { padding-right: 2px; }
@@ -22,7 +22,7 @@ QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
 QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover { background: #383c40; }
 QDoubleSpinBox::up-arrow, QDoubleSpinBox::down-arrow { width: 9px; height: 9px; }
 QSlider::groove:vertical { background: #26292d; width: 6px; border-radius: 3px; }
-QSlider::handle:vertical { background: #e0392b; height: 14px; margin: 0 -4px; border-radius: 4px; }
+QSlider::handle:vertical { background: #ff5a4d; height: 14px; margin: 0 -4px; border-radius: 4px; }
 QHeaderView::section { background: #1f2225; border: none; padding: 4px; }
 QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }
 QScrollBar::handle:vertical { background: #3d3e47; border-radius: 4px; min-height: 24px; }
