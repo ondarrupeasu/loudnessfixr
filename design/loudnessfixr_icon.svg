@@ -6,10 +6,10 @@
   <g clip-path="url(#rs)">
     <rect width="1024" height="1024" fill="#17191e"/>
 
-    <!-- symbol raised to leave room for wordmark -->
-    <g transform="translate(0 -52)">
+    <!-- symbol centered, no wordmark -->
+    <g transform="translate(512 512) scale(1.18) translate(-479 -422)">
 
-      <!-- Speaker + 3 waves (white), LEFT, bigger -->
+      <!-- Speaker + 3 waves (white), LEFT -->
       <g transform="translate(300 512) scale(1.15)">
         <g fill="#17191e" stroke="#17191e" stroke-width="52" stroke-linejoin="round" stroke-linecap="round">
           <rect x="-140" y="-56" width="76" height="112" rx="18"/>
@@ -31,7 +31,7 @@
         </g>
       </g>
 
-      <!-- Magic wand (coral), RIGHT, leaning left, tip up, stripes near tip, bigger -->
+      <!-- Magic wand (coral), RIGHT, leaning left, tip up, stripes near tip -->
       <g transform="translate(715 515) rotate(-25)">
         <rect x="-24" y="-235" width="48" height="470" rx="24" fill="#ff5a4d"/>
         <rect x="-26" y="-190" width="52" height="26" fill="#17191e"/>
@@ -47,9 +47,5 @@
       </g>
 
     </g>
-
-    <!-- Wordmark -->
-    <text x="512" y="912" text-anchor="middle" font-family="Helvetica Neue,Arial,sans-serif" font-weight="800" font-size="122" letter-spacing="-5">
-      <tspan fill="#ff5a4d">Loudness</tspan><tspan fill="#f2f2f4">Fix</tspan><tspan fill="#ff5a4d">R</tspan></text>
   </g>
 </svg>
