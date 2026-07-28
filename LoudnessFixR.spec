@@ -43,6 +43,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    # Icono del .exe en Windows (ignorado en macOS: allí manda el .icns del BUNDLE).
+    icon='design/loudnessfixr.ico' if sys.platform == 'win32' else None,
 )
 coll = COLLECT(
     exe,
