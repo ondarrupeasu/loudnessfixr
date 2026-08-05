@@ -2,6 +2,10 @@ import sys
 from PySide6.QtWidgets import QApplication
 from ui.main_window import MainWindow
 
+import version
+from core.updater_core import Updater, UpdaterConfig
+from core.updater_qt import check_and_prompt
+
 DARK_QSS = """
 QWidget { background: #16181a; color: #e7e5df; font-size: 12px; }
 QGroupBox { border: 1px solid #383c40; border-radius: 8px; margin-top: 8px; padding-top: 12px; font-weight: bold; }
@@ -40,6 +44,15 @@ def main():
     app.setStyleSheet(DARK_QSS)
     win = MainWindow()
     win.show()
+
+    # Auto-updater compartido de la suite (solo actúa si la app está empaquetada).
+    check_and_prompt(win, Updater(UpdaterConfig(
+        app_name="LoudnessFixR",
+        repo="ondarrupeasu/loudnessfixr-releases",
+        current_build=version.__build__,
+        public_key_b64="z7ADf21EJCq4XbsmeICVTrVCdjsJ6A1RI5gVlmidEfU=",
+    )))
+
     sys.exit(app.exec())
 
 
