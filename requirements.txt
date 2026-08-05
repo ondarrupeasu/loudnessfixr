@@ -6,3 +6,4 @@ imageio-ffmpeg
 PySide6
 sounddevice
 cryptography
+certifi

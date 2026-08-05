@@ -1,0 +1,55 @@
+name: Windows build
+
+# Compila LoudnessFixR para Windows (.exe ONEFILE) en un runner Windows de GitHub — no hace falta
+# un PC Windows para construirlo.
+#
+# DÓNDE VA EL .exe:
+#  - Se sube como ARTIFACT con retención CORTA (3 días). tools/publish_release.sh (en el Mac) lo baja
+#    de ahí, calcula sha256, lo FIRMA con la clave Ed25519 de la suite y lo añade al release + latest.json.
+#  - NO usamos secretos cross-repo (ni RELEASES_TOKEN): el publish local se encarga de subirlo al release.
+on:
+  push:
+    branches: [ci-windows]
+  workflow_dispatch: {}      # permite lanzarlo a mano desde la web
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"      # wheels estables de PySide6/soundfile/etc. en Windows
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Construir el .exe (onefile)
+        run: pyinstaller --noconfirm --clean LoudnessFixR-win.spec
+
+      - name: Verificar que existe dist/LoudnessFixR.exe (BLOQUEA si no)
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist/LoudnessFixR.exe")) {
+            throw "No se generó dist/LoudnessFixR.exe"
+          }
+          Write-Host "OK: dist/LoudnessFixR.exe existe."
+
+      - name: Nombre del build
+        id: v
+        shell: pwsh
+        run: |
+          $build = python -c "import sys; sys.path.insert(0,'.'); import version; print(version.__build__)"
+          echo "build=$build" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Subir artifact (retención corta)
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoudnessFixR-Windows-${{ steps.v.outputs.build }}
+          path: dist/LoudnessFixR.exe      # onefile: un único .exe
+          retention-days: 3

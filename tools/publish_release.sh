@@ -7,6 +7,7 @@
 set -e
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"; cd "$PROJ"
 REPO="ondarrupeasu/loudnessfixr-releases"
+SRC_REPO="ondarrupeasu/audio-loudness-toolkit"   # repo fuente (de ahí bajamos el .exe de Windows que compiló CI)
 APP="LoudnessFixR"
 BUILD="$(./venv/bin/python -c 'import version; print(version.__build__)')"
 NOTES="${1:-Build $BUILD}"
@@ -32,18 +33,39 @@ ditto -c -k --sequesterRsrc --keepParent "dist/$APP.app" "$OUT/$APP.zip"
 ZIP_SHA="$(shasum -a 256 "$OUT/$APP.zip" | awk '{print $1}')"
 ZIP_SIG="$(sign "$APP|$BUILD|mac|$ZIP_SHA")"
 
+# Windows: bajar el .exe (onefile) que compiló GitHub Actions para ESTE build, como ARTIFACT del repo
+# fuente. Si no hay artifact (¿CI en curso, o build no coincide?), se publica solo Mac y se avisa.
+EXE_JSON=""
+rm -f "$OUT/$APP.exe"
+WINDIR="$OUT/win-artifact"; rm -rf "$WINDIR"; mkdir -p "$WINDIR"
+echo "Buscando el .exe de Windows (artifact LoudnessFixR-Windows-$BUILD en $SRC_REPO)…"
+if gh run download --repo "$SRC_REPO" -n "$APP-Windows-$BUILD" -D "$WINDIR" 2>/dev/null; then
+    EXE="$(/usr/bin/find "$WINDIR" -name "$APP.exe" | head -1)"
+    if [ -n "$EXE" ] && [ -f "$EXE" ]; then
+        cp "$EXE" "$OUT/$APP.exe"
+        EXE_SHA="$(shasum -a 256 "$OUT/$APP.exe" | awk '{print $1}')"
+        EXE_SIG="$(sign "$APP|$BUILD|win|$EXE_SHA")"
+        EXE_JSON=", \"exe_win\": \"https://github.com/$REPO/releases/latest/download/$APP.exe\", \"sha256_win\": \"$EXE_SHA\", \"sig_win\": \"$EXE_SIG\""
+        echo "  ✓ .exe de Windows listo (sha256 $EXE_SHA, firmado)."
+    fi
+fi
+[ -z "$EXE_JSON" ] && echo "  ⚠️  Sin .exe de Windows para $BUILD (¿CI en curso?). Publico solo Mac por ahora."
+
 MINJSON=""
 [ -n "$MIN_VERSION" ] && MINJSON=", \"min_version\": \"$MIN_VERSION\""
 
 cat > "$OUT/latest.json" <<JSON
-{"build": "$BUILD", "zip": "https://github.com/$REPO/releases/latest/download/$APP.zip", "sha256": "$ZIP_SHA", "sig": "$ZIP_SIG"$MINJSON, "notes": "$NOTES"}
+{"build": "$BUILD", "zip": "https://github.com/$REPO/releases/latest/download/$APP.zip", "sha256": "$ZIP_SHA", "sig": "$ZIP_SIG"$EXE_JSON$MINJSON, "notes": "$NOTES"}
 JSON
+
+ASSETS="$OUT/$APP.zip $OUT/latest.json"
+[ -f "$OUT/$APP.exe" ] && ASSETS="$ASSETS $OUT/$APP.exe"
 
 echo "Publicando release $BUILD en $REPO…"
 if gh release view "$BUILD" --repo "$REPO" >/dev/null 2>&1; then
-    gh release upload "$BUILD" --repo "$REPO" --clobber "$OUT/$APP.zip" "$OUT/latest.json"
+    gh release upload "$BUILD" --repo "$REPO" --clobber $ASSETS
 else
-    gh release create "$BUILD" --repo "$REPO" --title "$BUILD" --notes "$NOTES" "$OUT/$APP.zip" "$OUT/latest.json"
+    gh release create "$BUILD" --repo "$REPO" --title "$BUILD" --notes "$NOTES" $ASSETS
 fi
 gh release edit "$BUILD" --repo "$REPO" --latest >/dev/null
 echo "✅ Publicado. 'latest' ahora apunta a $BUILD."
