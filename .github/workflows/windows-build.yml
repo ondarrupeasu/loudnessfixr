@@ -9,7 +9,12 @@ name: Windows build
 #  - NO usamos secretos cross-repo (ni RELEASES_TOKEN): el publish local se encarga de subirlo al release.
 on:
   push:
-    branches: [ci-windows]
+    branches: [main]
+    paths:
+      - "**/*.py"
+      - "LoudnessFixR-win.spec"
+      - "requirements.txt"
+      - ".github/workflows/windows-build.yml"
   workflow_dispatch: {}      # permite lanzarlo a mano desde la web
 
 jobs:
