@@ -7,7 +7,7 @@
 set -e
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"; cd "$PROJ"
 REPO="ondarrupeasu/loudnessfixr-releases"
-SRC_REPO="ondarrupeasu/audio-loudness-toolkit"   # repo fuente (de ahí bajamos el .exe de Windows que compiló CI)
+SRC_REPO="ondarrupeasu/loudnessfixr"   # repo fuente (de ahí bajamos el .exe de Windows que compiló CI)
 APP="LoudnessFixR"
 BUILD="$(./venv/bin/python -c 'import version; print(version.__build__)')"
 NOTES="${1:-Build $BUILD}"
