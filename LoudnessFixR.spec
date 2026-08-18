@@ -6,6 +6,7 @@ from PyInstaller.utils.hooks import collect_all
 datas = []
 binaries = []
 hiddenimports = []
+datas += [('assets/logo.png', 'assets')]        # logo del splash de arranque
 datas += collect_data_files('imageio_ffmpeg')
 datas += collect_data_files('soundfile')
 tmp_ret = collect_all('sounddevice')

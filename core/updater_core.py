@@ -54,6 +54,7 @@ class UpdaterConfig:
     current_build: str       # build actual de la app (p.ej. mipaquete.__build__)
     public_key_b64: str      # clave pública Ed25519 (base64) para verificar la firma
     user_agent: str = ""     # UA propio (GitHub/Fastly cachean 'latest' por UA); por defecto {app_name}-Updater
+    manifest_url: str = ""   # si se define, URL del latest.json (p.ej. Infomaniak /update/<app>/); si no, GitHub
 
     def __post_init__(self) -> None:
         if not self.user_agent:
@@ -61,6 +62,10 @@ class UpdaterConfig:
 
     @property
     def latest_json_url(self) -> str:
+        # Distribución en Infomaniak (apps.cinemafilmak.com/update/<app>/latest.json) si se define manifest_url;
+        # si no, el flujo antiguo por releases de GitHub. La firma Ed25519 no cubre la URL → mover el hosting no la invalida.
+        if self.manifest_url:
+            return self.manifest_url
         return f"https://github.com/{self.repo}/releases/latest/download/latest.json"
 
 

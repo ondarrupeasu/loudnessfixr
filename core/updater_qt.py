@@ -58,23 +58,31 @@ class _ApplyWorker(QThread):
             self.failed.emit(str(e))
 
 
-def check_and_prompt(parent, updater: Updater) -> None:
-    """Lanza la comprobación de updates en segundo plano. No bloquea. Solo actúa si la app está empaquetada."""
-    if not bool(getattr(sys, "frozen", False)):
+def check_and_prompt(parent, updater: Updater, notify_none: bool = False) -> None:
+    """Lanza la comprobación de updates en segundo plano. No bloquea.
+    - Automático al arrancar (notify_none=False): solo si la app está empaquetada; silencioso si estás al día.
+    - Manual desde menú (notify_none=True): comprueba SIEMPRE y avisa también si estás al día o si falló la comprobación."""
+    if not notify_none and not bool(getattr(sys, "frozen", False)):
         return
     worker = _CheckWorker(updater)
     parent._cf_update_worker = worker  # mantener viva la referencia
-    worker.done.connect(lambda info: _on_check(parent, updater, info))
+    worker.done.connect(lambda info: _on_check(parent, updater, info, notify_none))
     worker.start()
 
 
-def _on_check(parent, updater: Updater, info) -> None:
+def _on_check(parent, updater: Updater, info, notify_none: bool = False) -> None:
     if not info:
+        if notify_none:
+            QMessageBox.information(parent, "Actualización",
+                                    "No se pudo comprobar si hay actualizaciones. Revisa tu conexión.")
         return
     if updater.is_obsolete(info):
         _prompt(parent, updater, info, mandatory=True)
     elif updater.has_newer(info):
         _prompt(parent, updater, info, mandatory=False)
+    elif notify_none:
+        QMessageBox.information(parent, "Actualización",
+                                f"Estás en la última versión ({info.get('build', '?')}).")
 
 
 def _prompt(parent, updater: Updater, info: dict, *, mandatory: bool) -> None:

@@ -1,10 +1,19 @@
+import os
 import sys
 from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QAction
 from ui.main_window import MainWindow
 
 import version
 from core.updater_core import Updater, UpdaterConfig
 from core.updater_qt import check_and_prompt
+from core.splash import Splash
+
+
+def _logo_path():
+    # Frozen (.app): assets/ va al lado del ejecutable (_MEIPASS). Fuente: junto a main.py.
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, "assets", "logo.png")
 
 DARK_QSS = """
 QWidget { background: #16181a; color: #e7e5df; font-size: 12px; }
@@ -42,16 +51,28 @@ QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 def main():
     app = QApplication(sys.argv)
     app.setStyleSheet(DARK_QSS)
+    splash = Splash.show(app, _logo_path(), "LoudnessFixR")
     win = MainWindow()
     win.show()
+    splash.finish(win)
 
     # Auto-updater compartido de la suite (solo actúa si la app está empaquetada).
-    check_and_prompt(win, Updater(UpdaterConfig(
+    # Distribución en Infomaniak (privado): baja el manifiesto de apps.cinemafilmak.com/update/.
+    win._updater = Updater(UpdaterConfig(
         app_name="LoudnessFixR",
         repo="ondarrupeasu/loudnessfixr-releases",
         current_build=version.__build__,
         public_key_b64="z7ADf21EJCq4XbsmeICVTrVCdjsJ6A1RI5gVlmidEfU=",
-    )))
+        manifest_url="https://apps.cinemafilmak.com/update/loudnessfixr/latest.json",
+    ))
+    check_and_prompt(win, win._updater)          # chequeo automático al arrancar (silencioso si estás al día)
+
+    # Menú Ayuda → Buscar actualizaciones (chequeo manual con aviso "estás al día")
+    _help = win.menuBar().addMenu("Ayuda")
+    _act = QAction("Buscar actualizaciones…", win)
+    _act.setMenuRole(QAction.NoRole)             # evita que macOS lo reubique en el menú de la app
+    _act.triggered.connect(lambda: check_and_prompt(win, win._updater, notify_none=True))
+    _help.addAction(_act)
 
     sys.exit(app.exec())
 
