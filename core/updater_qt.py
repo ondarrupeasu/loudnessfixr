@@ -151,12 +151,19 @@ def _apply(parent, updater: Updater, info: dict) -> None:
         dlg.setValue(int(got * 100 / total) if total else 0)
 
     def on_ok() -> None:
-        dlg.setLabelText("Reiniciando para aplicar…")
-        QApplication.processEvents()   # pinta el mensaje antes de morir
-        # La app DEBE morir para que el script de swap (ya lanzado y detached, esperando a ESTE PID)
-        # pueda reemplazar el bundle. QApplication.quit() NO basta: si el worker u otros hilos siguen
-        # vivos, el proceso no sale y se queda colgado en "Reiniciando…". os._exit(0) mata el proceso
-        # de inmediato; el swap reabre una copia limpia. (Fix del cuelgue reportado 19 ago.)
+        # En Windows el swap se aplica al CERRARSE y la app NO se relanza sola (a propósito: así Defender
+        # ya escaneó el .exe cuando la reabres) → avisar de reabrir. En Mac sí se reinicia sola.
+        if sys.platform.startswith("win"):
+            dlg.close()
+            QMessageBox.information(parent, "Actualización",
+                                    "Actualización descargada. La app se cerrará; vuelve a abrirla "
+                                    "para usar la nueva versión.")
+        else:
+            dlg.setLabelText("Reiniciando para aplicar…")
+            QApplication.processEvents()   # pinta el mensaje antes de morir
+        # La app DEBE morir para que el swap (ya lanzado y detached, esperando a ESTE PID) reemplace el
+        # binario. QApplication.quit() NO basta si hay hilos vivos → os._exit(0) fuerza la salida.
+        # (Fix del cuelgue "Reiniciando…" reportado 19 ago.)
         os._exit(0)
 
     def on_fail(msg: str) -> None:
