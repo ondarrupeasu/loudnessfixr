@@ -8,6 +8,7 @@ import version
 from core.updater_core import Updater, UpdaterConfig
 from core.updater_qt import check_and_prompt
 from core.splash import Splash
+from core.report import report_dialog
 
 
 def _logo_path():
@@ -73,6 +74,10 @@ def main():
     _act.setMenuRole(QAction.NoRole)             # evita que macOS lo reubique en el menú de la app
     _act.triggered.connect(lambda: check_and_prompt(win, win._updater, notify_none=True))
     _help.addAction(_act)
+    _act_r = QAction("Reportar un problema…", win)
+    _act_r.setMenuRole(QAction.NoRole)
+    _act_r.triggered.connect(lambda: report_dialog(win, "LoudnessFixR", version.__build__))
+    _help.addAction(_act_r)
 
     sys.exit(app.exec())
 
