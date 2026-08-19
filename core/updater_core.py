@@ -250,6 +250,17 @@ class Updater:
         log.info("Actualización (Windows) descargada; swap al cerrar, sin relanzar.")
         return {"in_place": True, "build": build}
 
+    def _stable_install_target(self) -> Path:
+        """Ubicación ESTABLE donde instalar cuando la app corre translocada (Aplicaciones)."""
+        name = self.cfg.app_name
+        for base in ("/Applications", str(Path.home() / "Applications")):
+            b = Path(base)
+            if b.is_dir() and os.access(b, os.W_OK):
+                return b / f"{name}.app"
+        d = Path.home() / "Applications"
+        d.mkdir(parents=True, exist_ok=True)
+        return d / f"{name}.app"
+
     def _apply_macos(self, info: dict, on_progress=None) -> None:
         """macOS: descarga el .app (zip), verifica, y lanza un script que lo reemplaza con ditto y reabre."""
         zip_url = info.get("zip")
@@ -258,8 +269,12 @@ class Updater:
         app = self._app_path()
         if app is None:
             raise RuntimeError("La app no está empaquetada (modo desarrollo).")
-        if "AppTranslocation" in str(app):
-            raise RuntimeError("translocated")
+        # App "translocada" (descargada + no notarizada, corriendo desde una copia temporal de solo
+        # lectura): NO podemos reemplazar nuestro propio bundle. En vez de fallar, instalamos en una
+        # ubicación estable (Aplicaciones) y abrimos desde ahí → rompe el ciclo de translocación.
+        translocated = "AppTranslocation" in str(app)
+        target = self._stable_install_target() if translocated else app
+        log.info("apply_macos: translocated=%s → target=%s", translocated, target)
 
         tmp = Path(tempfile.mkdtemp(prefix="cf-update-"))
         zpath = tmp / f"{self.cfg.app_name}.zip"
@@ -277,10 +292,10 @@ ditto -x -k "{zpath}" "{tmp}/x" || exit 1
 NEW="{tmp}/x/{name}.app"
 [ -d "$NEW" ] || NEW="$(/usr/bin/find "{tmp}/x" -maxdepth 3 -name '{name}.app' -print -quit)"
 xattr -dr com.apple.quarantine "$NEW" 2>/dev/null
-rm -rf "{app}"
-ditto "$NEW" "{app}"
-xattr -dr com.apple.quarantine "{app}" 2>/dev/null
-open "{app}"
+rm -rf "{target}"
+ditto "$NEW" "{target}"
+xattr -dr com.apple.quarantine "{target}" 2>/dev/null
+open "{target}"
 rm -rf "{tmp}"
 """)
         script.chmod(0o755)

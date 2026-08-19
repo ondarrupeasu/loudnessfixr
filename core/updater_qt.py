@@ -16,6 +16,7 @@ Vendorizar junto a updater_core.py (mismo directorio). Requiere PySide6 + crypto
 from __future__ import annotations
 
 import logging
+import os
 import sys
 
 from PySide6.QtCore import Qt, QThread, Signal
@@ -125,7 +126,12 @@ def _apply(parent, updater: Updater, info: dict) -> None:
 
     def on_ok() -> None:
         dlg.setLabelText("Reiniciando para aplicar…")
-        QApplication.instance().quit()  # apply_update ya lanzó el swap; la app DEBE salir
+        QApplication.processEvents()   # pinta el mensaje antes de morir
+        # La app DEBE morir para que el script de swap (ya lanzado y detached, esperando a ESTE PID)
+        # pueda reemplazar el bundle. QApplication.quit() NO basta: si el worker u otros hilos siguen
+        # vivos, el proceso no sale y se queda colgado en "Reiniciando…". os._exit(0) mata el proceso
+        # de inmediato; el swap reabre una copia limpia. (Fix del cuelgue reportado 19 ago.)
+        os._exit(0)
 
     def on_fail(msg: str) -> None:
         dlg.close()
