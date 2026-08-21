@@ -111,6 +111,34 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+# ------------------------- caducidad / lease (candado de tiempo) -------------------------
+# Cada versión funciona OFFLINE este nº de días desde su FECHA DE BUILD (el prefijo YYYY-MM-DD del
+# build). Al caducar, la app exige conectarse: si hay build nuevo, actualiza; si no, el manifiesto
+# puede traer un `valid_until` FIRMADO que renueva el plazo (lo gestiona MC). Offline al caducar = bloqueo.
+import re as _re
+from datetime import date as _date, timedelta as _timedelta
+
+HARD_LEASE_DAYS = 90
+
+
+def _parse_build_date(build: str):
+    """Fecha del prefijo del build ('2026-08-19f' -> date(2026,8,19)). None si no encaja (→ fail-open)."""
+    m = _re.match(r"(\d{4})-(\d{2})-(\d{2})", str(build or ""))
+    if not m:
+        return None
+    try:
+        return _date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+
+
+def _parse_iso(s: str):
+    try:
+        return _date.fromisoformat(str(s)[:10])
+    except Exception:  # noqa: BLE001
+        return None
+
+
 class Updater:
     """Auto-updater de una app empaquetada (Mac + Windows), parametrizado por UpdaterConfig."""
 
@@ -143,6 +171,72 @@ class Updater:
         La app DEBE bloquear el uso y forzar actualización (no es solo 'hay novedad', es 'caducada')."""
         floor = str(info.get("min_version", "") or "")
         return bool(floor) and self.cfg.current_build < floor
+
+    # ------------------------- lease / caducidad por tiempo -------------------------
+
+    def _lease_path(self) -> Path:
+        """Fichero local donde se cachea el `valid_until` FIRMADO (renovación concedida por el servidor)."""
+        app = self.cfg.app_name
+        if sys.platform == "darwin":
+            base = Path.home() / "Library" / "Application Support" / app
+        elif sys.platform.startswith("win"):
+            base = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / app
+        else:
+            base = Path.home() / f".{app.lower()}"
+        return base / "lease.json"
+
+    def _verify_lease(self, valid_until: str, sig_b64: str) -> bool:
+        """Firma Ed25519 sobre 'app|lease|valid_until' (YYYY-MM-DD). Fail-closed: sin firma válida, no vale.
+        Así un usuario NO puede extenderse el plazo editando un fichero (solo el servidor, con la privada)."""
+        if not valid_until or not sig_b64 or _parse_iso(valid_until) is None:
+            return False
+        try:
+            pub = Ed25519PublicKey.from_public_bytes(base64.b64decode(self.cfg.public_key_b64))
+            pub.verify(base64.b64decode(sig_b64), f"{self.cfg.app_name}|lease|{valid_until}".encode())
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _cached_valid_until(self) -> str:
+        """`valid_until` firmado guardado en local, o '' si no hay / no verifica (→ se ignora)."""
+        try:
+            d = json.loads(self._lease_path().read_text())
+            vu, sig = str(d.get("valid_until", "")), str(d.get("sig_lease", ""))
+            return vu if self._verify_lease(vu, sig) else ""
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def adopt_lease(self, info: dict) -> None:
+        """Si el manifiesto trae un `valid_until` FIRMADO y VÁLIDO más tardío que el cacheado, lo guarda
+        (renovación). Idempotente y seguro: solo adopta firmas válidas y fechas posteriores."""
+        vu, sig = str(info.get("valid_until", "")), str(info.get("sig_lease", ""))
+        if not self._verify_lease(vu, sig):
+            return
+        if vu > self._cached_valid_until():          # ISO como string ordena cronológicamente
+            try:
+                p = self._lease_path()
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(json.dumps({"valid_until": vu, "sig_lease": sig}))
+                log.info("lease renovada hasta %s", vu)
+            except Exception as e:  # noqa: BLE001
+                log.warning("no pude guardar la lease: %s", e)
+
+    def valid_until(self):
+        """Fecha de caducidad EFECTIVA (local, sin red): max(fecha_build + HARD_LEASE_DAYS, lease firmada).
+        Si el build no trae fecha reconocible y no hay lease → date.max (NO caduca = fail-open, no romper)."""
+        cands = []
+        bd = _parse_build_date(self.cfg.current_build)
+        if bd:
+            cands.append(bd + _timedelta(days=HARD_LEASE_DAYS))
+        ld = _parse_iso(self._cached_valid_until())
+        if ld:
+            cands.append(ld)
+        return max(cands) if cands else _date.max
+
+    def is_expired(self) -> bool:
+        """True si esta versión ha CADUCADO (fecha local pasada). OFFLINE-PROOF: no necesita internet.
+        (Caveat conocido: atrasar el reloj del equipo la esquiva; es candado blando+tiempo, no DRM.)"""
+        return _date.today() > self.valid_until()
 
     # ------------------------- verificación -------------------------
 

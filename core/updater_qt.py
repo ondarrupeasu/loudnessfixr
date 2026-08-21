@@ -66,10 +66,42 @@ def check_and_prompt(parent, updater: Updater, notify_none: bool = False) -> Non
     - Manual desde menú (notify_none=True): comprueba SIEMPRE y avisa también si estás al día o si falló la comprobación."""
     if not notify_none and not bool(getattr(sys, "frozen", False)):
         return
+    # 0) GATE DE CADUCIDAD (lease) — SÍNCRONO y offline-proof. Si la versión ha caducado y no se puede
+    # renovar (sin internet, o sin build/licencia nueva) → bloquea y cierra. Rápido si NO ha caducado
+    # (no toca la red). Va antes del chequeo de fondo para que la app no se use si está caducada.
+    _enforce_lease(parent, updater)
     worker = _CheckWorker(updater)
     parent._cf_update_worker = worker  # mantener viva la referencia
     worker.done.connect(lambda info: _on_check(parent, updater, info, notify_none))
     worker.start()
+
+
+def _enforce_lease(parent, updater) -> None:
+    """Gate síncrono de caducidad por tiempo. Solo hace red si la versión ya CADUCÓ (raro). Si bloquea,
+    la app se cierra dentro (os._exit). Ante cualquier error del cálculo → fail-open (no bloquear por un bug)."""
+    if not bool(getattr(sys, "frozen", False)):
+        return
+    try:
+        if not updater.is_expired():
+            return                              # dentro de plazo → sigue, SIN internet
+    except Exception:                           # noqa: BLE001
+        return
+    info = updater.check_latest(timeout=8.0)    # caducada → hay que renovar online
+    if not info:
+        _blocked(parent, {"eol_message":
+            "Esta versión ha caducado. Conéctate a internet para renovarla o descargar la última.",
+            "eol_url": "https://apps.cinemafilmak.com"})
+        return                                   # (no vuelve: _blocked hace os._exit)
+    try:
+        updater.adopt_lease(info)                # ¿el servidor concede más plazo?
+        if not updater.is_expired():
+            return                               # renovada → sigue
+    except Exception:                            # noqa: BLE001
+        return
+    if updater.has_newer(info):
+        _prompt(parent, updater, info, mandatory=True)   # hay build nuevo → actualización obligatoria
+    else:
+        _blocked(parent, info)                   # caducada y sin renovación posible → bloquear
 
 
 def _on_check(parent, updater: Updater, info, notify_none: bool = False) -> None:
@@ -78,6 +110,10 @@ def _on_check(parent, updater: Updater, info, notify_none: bool = False) -> None
             QMessageBox.information(parent, "Actualización",
                                     "No se pudo comprobar si hay actualizaciones. Revisa tu conexión.")
         return
+    try:
+        updater.adopt_lease(info)   # renovar la caducidad si el servidor concede más plazo (aunque no haya caducado aún)
+    except Exception:  # noqa: BLE001
+        pass
     if updater.is_obsolete(info):
         if updater.has_newer(info):
             _prompt(parent, updater, info, mandatory=True)   # hay build más nuevo → forzar actualización
