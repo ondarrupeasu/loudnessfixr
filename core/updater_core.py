@@ -85,17 +85,12 @@ def _ssl_ctx() -> ssl.SSLContext:
 
 @contextlib.contextmanager
 def _prefer_ipv4():
-    """Fuerza IPv4 en urllib durante la petición (evita cuelgues por IPv6 mal configurado)."""
-    orig = socket.getaddrinfo
-
-    def _v4(host, port, family=0, *a, **k):
-        return orig(host, port, socket.AF_INET, *a, **k)
-
-    socket.getaddrinfo = _v4
-    try:
-        yield
-    finally:
-        socket.getaddrinfo = orig
+    """(Histórico) Antes forzaba IPv4 en urllib para evitar cuelgues con IPv6 mal configurado. Pero en
+    redes IPv6-primarias (routers/ONT nuevos) forzar IPv4 provoca fallos intermitentes de resolución
+    → la actualización no llegaba (hallazgo de la sesión MediaDriveR con el router nuevo del estudio).
+    Ahora NO fuerza nada: doble pila (IPv4+IPv6), que el sistema elija. Se conserva el context manager
+    para no tocar las llamadas existentes."""
+    yield
 
 
 def is_frozen() -> bool:
@@ -284,6 +279,22 @@ class Updater:
             if parent.suffix == ".app":
                 return parent
         return None
+
+    def cleanup_windows_backup(self) -> None:
+        """Borra un <App>.old.exe que pudiera haber quedado de una actualización. El swap intenta borrarlo
+        (reintenta 8×), pero a veces Defender lo tiene bloqueado ese instante. Al ARRANCAR ya está libre →
+        se limpia. Usa el nombre del .exe en marcha (no app_name), así vale sea cual sea el binario.
+        (Hallazgo de la sesión MediaDriveR.) Se llama desde check_and_prompt: cero cambios por app."""
+        if not (is_frozen() and sys.platform.startswith("win")):
+            return
+        try:
+            target = Path(sys.executable)
+            old = target.with_name(target.stem + ".old" + target.suffix)
+            if old.exists():
+                old.unlink()
+                log.info("update: limpiado respaldo %s", old.name)
+        except Exception as e:  # noqa: BLE001
+            log.info("update: no pude limpiar el .old.exe: %s", e)
 
     def apply_update(self, info: dict, on_progress=None) -> dict | None:
         """Descarga el nuevo build (verificando min_version + sha256 + firma) y lanza el reemplazo

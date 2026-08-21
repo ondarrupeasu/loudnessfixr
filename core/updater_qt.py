@@ -66,6 +66,7 @@ def check_and_prompt(parent, updater: Updater, notify_none: bool = False) -> Non
     - Manual desde menú (notify_none=True): comprueba SIEMPRE y avisa también si estás al día o si falló la comprobación."""
     if not notify_none and not bool(getattr(sys, "frozen", False)):
         return
+    updater.cleanup_windows_backup()   # limpia un <App>.old.exe que dejara una actualización previa (Windows)
     # 0) GATE DE CADUCIDAD (lease) — SÍNCRONO y offline-proof. Si la versión ha caducado y no se puede
     # renovar (sin internet, o sin build/licencia nueva) → bloquea y cierra. Rápido si NO ha caducado
     # (no toca la red). Va antes del chequeo de fondo para que la app no se use si está caducada.
