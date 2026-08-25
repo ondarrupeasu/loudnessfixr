@@ -7,7 +7,7 @@ Una sola llamada al arrancar la ventana principal:
 
 Comprueba en segundo plano (no bloquea el arranque) y, según el caso, muestra el diálogo estándar
 —idéntico en todas las apps de la suite—:
-  - `is_obsolete` (kill-switch por min_version) → aviso OBLIGATORIO, solo "Actualizar ahora".
+  - `is_obsolete` (kill-switch por min_version) → aviso OBLIGATORIO, solo "Update now".
   - `has_newer` → ofrece instalar ("Instalar" / "Ahora no").
 Al aceptar: descarga con barra de progreso y cierra la app para que el swap se aplique.
 
@@ -90,7 +90,7 @@ def _enforce_lease(parent, updater) -> None:
     info = updater.check_latest(timeout=8.0)    # caducada → hay que renovar online
     if not info:
         _blocked(parent, {"eol_message":
-            "Esta versión ha caducado. Conéctate a internet para renovarla o descargar la última.",
+            "This version has expired. Connect to the internet to renew it or download the latest.",
             "eol_url": "https://apps.cinemafilmak.com"})
         return                                   # (no vuelve: _blocked hace os._exit)
     try:
@@ -108,8 +108,8 @@ def _enforce_lease(parent, updater) -> None:
 def _on_check(parent, updater: Updater, info, notify_none: bool = False) -> None:
     if not info:
         if notify_none:
-            QMessageBox.information(parent, "Actualización",
-                                    "No se pudo comprobar si hay actualizaciones. Revisa tu conexión.")
+            QMessageBox.information(parent, "Update",
+                                    "Couldn't check for updates. Check your connection.")
         return
     try:
         updater.adopt_lease(info)   # renovar la caducidad si el servidor concede más plazo (aunque no haya caducado aún)
@@ -123,26 +123,26 @@ def _on_check(parent, updater: Updater, info, notify_none: bool = False) -> None
     elif updater.has_newer(info):
         _prompt(parent, updater, info, mandatory=False)
     elif notify_none:
-        QMessageBox.information(parent, "Actualización",
-                                f"Estás en la última versión ({info.get('build', '?')}).")
+        QMessageBox.information(parent, "Update",
+                                f"You're on the latest version ({info.get('build', '?')}).")
 
 
 def _prompt(parent, updater: Updater, info: dict, *, mandatory: bool) -> None:
     build = info.get("build", "?")
     notes = str(info.get("notes", "") or "")
     box = QMessageBox(parent)
-    box.setWindowTitle("Actualización")
+    box.setWindowTitle("Update")
     if mandatory:
         box.setIcon(QMessageBox.Warning)
-        box.setText(f"Esta versión ha caducado.\nDebes actualizar a {build} para seguir usando la app.")
+        box.setText(f"This version has expired.\nYou must update to {build} to keep using the app.")
         box.setStandardButtons(QMessageBox.Ok)
-        box.button(QMessageBox.Ok).setText("Actualizar ahora")
+        box.button(QMessageBox.Ok).setText("Update now")
     else:
         box.setIcon(QMessageBox.Information)
-        box.setText(f"Hay una nueva versión disponible ({build}).\n¿Instalar ahora?")
+        box.setText(f"A new version is available ({build}).\nInstall now?")
         box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        box.button(QMessageBox.Yes).setText("Instalar")
-        box.button(QMessageBox.No).setText("Ahora no")
+        box.button(QMessageBox.Yes).setText("Install")
+        box.button(QMessageBox.No).setText("Not now")
     if notes:
         box.setInformativeText(notes)
     resp = box.exec()
@@ -155,14 +155,14 @@ def _blocked(parent, info: dict) -> None:
     queda inutilizada. Muestra el mensaje (configurable desde el manifiesto) y CIERRA la app.
     Campos opcionales del latest.json: `eol_message` (texto) y `eol_url` (botón 'Descargar')."""
     msg = str(info.get("eol_message") or
-              "Esta versión ya no está disponible.\nDescarga la última versión oficial para seguir usándola.")
+              "This version is no longer available.\nDownload the latest official version to keep using it.")
     url = str(info.get("eol_url") or "")
     box = QMessageBox(parent)
-    box.setWindowTitle("Actualización requerida")
+    box.setWindowTitle("Update required")
     box.setIcon(QMessageBox.Warning)
     box.setText(msg)
     box.setStandardButtons(QMessageBox.Ok)
-    box.button(QMessageBox.Ok).setText("Descargar" if url else "Cerrar")
+    box.button(QMessageBox.Ok).setText("Download" if url else "Close")
     box.exec()
     if url:
         try:
@@ -173,7 +173,7 @@ def _blocked(parent, info: dict) -> None:
 
 
 def _apply(parent, updater: Updater, info: dict) -> None:
-    dlg = QProgressDialog("Descargando actualización…", None, 0, 100, parent)
+    dlg = QProgressDialog("Downloading update…", None, 0, 100, parent)
     dlg.setWindowModality(Qt.WindowModal)
     dlg.setCancelButton(None)
     dlg.setAutoClose(False)
@@ -192,11 +192,11 @@ def _apply(parent, updater: Updater, info: dict) -> None:
         # ya escaneó el .exe cuando la reabres) → avisar de reabrir. En Mac sí se reinicia sola.
         if sys.platform.startswith("win"):
             dlg.close()
-            QMessageBox.information(parent, "Actualización",
-                                    "Actualización descargada. La app se cerrará; vuelve a abrirla "
-                                    "para usar la nueva versión.")
+            QMessageBox.information(parent, "Update",
+                                    "Update downloaded. The app will quit; open it again "
+                                    "to use the new version.")
         else:
-            dlg.setLabelText("Reiniciando para aplicar…")
+            dlg.setLabelText("Restarting to apply…")
             QApplication.processEvents()   # pinta el mensaje antes de morir
         # La app DEBE morir para que el swap (ya lanzado y detached, esperando a ESTE PID) reemplace el
         # binario. QApplication.quit() NO basta si hay hilos vivos → os._exit(0) fuerza la salida.
@@ -205,7 +205,7 @@ def _apply(parent, updater: Updater, info: dict) -> None:
 
     def on_fail(msg: str) -> None:
         dlg.close()
-        QMessageBox.critical(parent, "Error al actualizar", msg)
+        QMessageBox.critical(parent, "Update failed", msg)
 
     worker.progress.connect(on_prog)
     worker.ok.connect(on_ok)

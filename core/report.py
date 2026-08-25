@@ -105,7 +105,7 @@ def _save_local_zip(app_name: str, version: str, note: str, log_text: str) -> st
     if not base.is_dir():
         base = Path(os.path.expanduser("~"))
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    zpath = base / f"{app_name}-reporte-{stamp}.zip"
+    zpath = base / f"{app_name}-report-{stamp}.zip"
     try:
         with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr("meta.txt", f"app: {app_name}\nversion: {version}\nos: {_os_string()}\nnota: {note}\n")
@@ -122,43 +122,43 @@ def report_dialog(parent, app_name: str, version: str, log_dir=None) -> None:
     log_text = _read_tail(_newest_log(dirs))
 
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Reportar un problema")
+    dlg.setWindowTitle("Report a problem")
     dlg.setMinimumWidth(460)
     lay = QVBoxLayout(dlg)
-    lay.addWidget(QLabel(f"¿Qué estabas haciendo cuando falló <b>{app_name}</b>?\n"
-                         "Se enviará tu nota junto con el registro técnico, la versión y el sistema.\n"
-                         "No se envía ningún dato personal."))
+    lay.addWidget(QLabel(f"What were you doing when <b>{app_name}</b> failed?\n"
+                         "Your note will be sent with the technical log, the version and your OS.\n"
+                         "No personal data is sent."))
     note_edit = QPlainTextEdit()
-    note_edit.setPlaceholderText("Ej.: 'Al pulsar Exportar con un vídeo de la GH5 se cerró la app.'")
+    note_edit.setPlaceholderText("e.g. 'The app quit when I pressed Export with a GH5 clip.'")
     note_edit.setMinimumHeight(110)
     lay.addWidget(note_edit)
     bb = QDialogButtonBox(QDialogButtonBox.Cancel)
-    send_btn = bb.addButton("Enviar informe", QDialogButtonBox.AcceptRole)
+    send_btn = bb.addButton("Send report", QDialogButtonBox.AcceptRole)
     lay.addWidget(bb)
     bb.rejected.connect(dlg.reject)
 
     def _do_send():
         note = note_edit.toPlainText().strip()
-        send_btn.setEnabled(False); send_btn.setText("Enviando…")
+        send_btn.setEnabled(False); send_btn.setText("Sending…")
         payload = {"app": app_name, "version": str(version), "os": _os_string(),
                    "note": note, "log": log_text}
         worker = _SendWorker(payload)
         dlg._worker = worker  # mantener viva la referencia
 
         def _ok():
-            QMessageBox.information(parent, "Gracias",
-                                   "Informe enviado. ¡Gracias por ayudar a mejorar la app!")
+            QMessageBox.information(parent, "Thanks",
+                                   "Report sent. Thanks for helping improve the app!")
             dlg.accept()
 
         def _fail(msg):
             zpath = _save_local_zip(app_name, version, note, log_text)
             if zpath:
-                QMessageBox.warning(parent, "Sin conexión",
-                                    "No pude enviar el informe (¿sin internet?).\n\n"
-                                    f"Lo he guardado aquí para que me lo pases a mano:\n{zpath}")
+                QMessageBox.warning(parent, "No connection",
+                                    "Couldn't send the report (no internet?).\n\n"
+                                    f"I saved it here so you can pass it on:\n{zpath}")
             else:
-                QMessageBox.warning(parent, "No enviado",
-                                    f"No pude enviar el informe: {msg}")
+                QMessageBox.warning(parent, "Not sent",
+                                    f"Couldn't send the report: {msg}")
             dlg.accept()
 
         worker.ok.connect(_ok)

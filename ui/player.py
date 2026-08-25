@@ -51,22 +51,22 @@ class PlayerWidget(QWidget):
         self.slider.setStyleSheet("""
             QSlider::groove:horizontal {
                 height: 3px;
-                background: #383c40;
+                background: #2a2b32;
                 border-radius: 1px;
             }
             QSlider::sub-page:horizontal {
-                background: #6b6f73;
+                background: #6b6c74;
                 border-radius: 1px;
             }
             QSlider::handle:horizontal {
                 width: 8px;
                 height: 8px;
                 margin: -3px 0;
-                background: #d9854a;
+                background: #ff5a4d;
                 border-radius: 4px;
             }
             QSlider::handle:horizontal:disabled {
-                background: #4a4d50;
+                background: #3d3e47;
             }
         """)
         layout.addWidget(self.slider)

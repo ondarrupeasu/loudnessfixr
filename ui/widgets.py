@@ -49,7 +49,7 @@ class MeterBar(QProgressBar):
 
     def _apply_color(self, color):
         self.setStyleSheet(
-            f"QProgressBar {{ background: #26292d; border: none; border-radius: 3px; }}"
+            f"QProgressBar {{ background: #1c1d23; border: none; border-radius: 3px; }}"
             f"QProgressBar::chunk {{ background: {color}; border-radius: 3px; }}"
         )
 

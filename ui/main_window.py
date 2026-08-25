@@ -60,7 +60,7 @@ class ChannelStrip(QWidget):
         self.head.setAlignment(Qt.AlignCenter)
         self.sub = QLabel(i18n.tr(channel.name))
         self.sub.setAlignment(Qt.AlignCenter)
-        self.sub.setStyleSheet("color: #93908a; font-size: 10px; text-transform: uppercase;")
+        self.sub.setStyleSheet("color: #8a8a92; font-size: 10px; text-transform: uppercase;")
         layout.addWidget(self.head)
         layout.addWidget(self.sub)
 
@@ -77,7 +77,7 @@ class ChannelStrip(QWidget):
 
         self.fname_label = QLabel("")
         self.fname_label.setWordWrap(True)
-        self.fname_label.setStyleSheet("color: #93908a; font-size: 10px;")
+        self.fname_label.setStyleSheet("color: #8a8a92; font-size: 10px;")
         layout.addWidget(self.fname_label)
 
         self.peak_label = QLabel("")
@@ -135,7 +135,7 @@ class ChannelStrip(QWidget):
         layout.addWidget(self.player)
 
         self.status_label = QLabel("")
-        self.status_label.setStyleSheet("color: #93908a; font-size: 10px;")
+        self.status_label.setStyleSheet("color: #8a8a92; font-size: 10px;")
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
         layout.addStretch()
@@ -241,7 +241,7 @@ class MainWindow(QMainWindow):
 
         top.addStretch()
         self.legend_label = QLabel()
-        self.legend_label.setStyleSheet("font-size: 11px; color: #93908a;")
+        self.legend_label.setStyleSheet("font-size: 11px; color: #8a8a92;")
         top.addWidget(self.legend_label)
         root.addLayout(top)
 

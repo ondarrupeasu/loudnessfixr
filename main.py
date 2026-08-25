@@ -17,27 +17,27 @@ def _logo_path():
     return os.path.join(base, "assets", "logo.png")
 
 DARK_QSS = """
-QWidget { background: #16181a; color: #e7e5df; font-size: 12px; }
-QGroupBox { border: 1px solid #383c40; border-radius: 8px; margin-top: 8px; padding-top: 12px; font-weight: bold; }
+QWidget { background: #0e0f12; color: #f2f2f4; font-size: 12px; }
+QGroupBox { border: 1px solid #2a2b32; border-radius: 8px; margin-top: 8px; padding-top: 12px; font-weight: bold; }
 QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }
-QPushButton { background: #26292d; border: 1px solid #383c40; border-radius: 4px; padding: 4px 8px; }
+QPushButton { background: #1c1d23; border: 1px solid #2a2b32; border-radius: 4px; padding: 4px 8px; }
 QPushButton:hover { border-color: #ff5a4d; }
-QPushButton:disabled { color: #5a5854; }
+QPushButton:disabled { color: #5a5b63; }
 QPushButton#Primary { background: #ff5a4d; border: 1px solid #ff5a4d; color: #14060a; font-weight: bold; }
 QPushButton#Primary:hover { background: #ff7d72; border-color: #ff7d72; }
-QPushButton#Primary:disabled { background: #3a2320; border-color: #3a2320; color: #7a6a66; }
-QLineEdit, QComboBox, QDoubleSpinBox, QTableWidget { background: #26292d; border: 1px solid #383c40; border-radius: 4px; padding: 2px 4px; }
+QPushButton#Primary:disabled { background: #3a2226; border-color: #3a2226; color: #6b6c74; }
+QLineEdit, QComboBox, QDoubleSpinBox, QTableWidget { background: #1c1d23; border: 1px solid #2a2b32; border-radius: 4px; padding: 2px 4px; }
 QDoubleSpinBox { padding-right: 2px; }
 QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
     width: 18px;
-    border-left: 1px solid #383c40;
-    background: #2f3338;
+    border-left: 1px solid #2a2b32;
+    background: #242530;
 }
-QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover { background: #383c40; }
+QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover { background: #2a2b32; }
 QDoubleSpinBox::up-arrow, QDoubleSpinBox::down-arrow { width: 9px; height: 9px; }
-QSlider::groove:vertical { background: #26292d; width: 6px; border-radius: 3px; }
+QSlider::groove:vertical { background: #1c1d23; width: 6px; border-radius: 3px; }
 QSlider::handle:vertical { background: #ff5a4d; height: 14px; margin: 0 -4px; border-radius: 4px; }
-QHeaderView::section { background: #1f2225; border: none; padding: 4px; }
+QHeaderView::section { background: #16171c; border: none; padding: 4px; }
 QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }
 QScrollBar::handle:vertical { background: #3d3e47; border-radius: 4px; min-height: 24px; }
 QScrollBar::handle:vertical:hover { background: #55565e; }
