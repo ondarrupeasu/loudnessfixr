@@ -37,6 +37,9 @@ upload() {  # $1 local, $2 ruta remota -> código HTTP
   curl -s --ssl-reqd --ftp-create-dirs -T "$1" --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$2" -o /dev/null -w "%{http_code}"
 }
 
+echo "Verificando el bundle antes de empaquetar…"
+bash "$PROJ/tools/verificar_bundle.sh" "dist/$APP.app" || { echo "❌ NO publico: el bundle no es válido."; exit 1; }
+
 echo "Empaquetando Mac $BUILD (ditto)…"
 rm -f "$OUT/$APP.zip" "$OUT/latest.json"
 ditto -c -k --sequesterRsrc --keepParent "dist/$APP.app" "$OUT/$APP.zip"
