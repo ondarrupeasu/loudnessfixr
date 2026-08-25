@@ -56,6 +56,13 @@ coll = COLLECT(
     upx_exclude=[],
     name='LoudnessFixR',
 )
+# CFBundleVersion = __build__ para que el hub (launchR) sepa qué versión tienes instalada aunque no la
+# instalara él. Se lee del fuente con regex (importar el paquete arrastraría deps al análisis).
+import re
+from pathlib import Path
+_BUILD = re.search(r'__build__\s*=\s*"([^"]+)"',
+                   Path("version.py").read_text()).group(1)
+
 if sys.platform == 'darwin':
     app = BUNDLE(
         coll,
@@ -67,5 +74,7 @@ if sys.platform == 'darwin':
         bundle_identifier='es.cinemafilmak.audioloudnesstoolkit',
         info_plist={
             'NSHighResolutionCapable': True,
+            'CFBundleShortVersionString': _BUILD,
+            'CFBundleVersion': _BUILD,
         },
     )
