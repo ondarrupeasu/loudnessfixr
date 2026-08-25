@@ -91,7 +91,16 @@ if [ -n "$WIN_SRC_REPO" ]; then
       HAY_EXE=1
     fi
   else
-    echo "  ⚠️  sin artifact de Windows para $BUILD. Publico solo Mac (Windows quedará «Unavailable» en el hub)."
+    # ⚠️ NO degradar a solo-Mac por las bravas en una app que YA publica Windows. No es que Windows quede
+    # «Unavailable»: es que el cliente Windows CASCA. `updater_core._apply_windows` hace
+    # `raise RuntimeError("no-windows-build")` si el manifiesto no trae `exe_win`, así que a quien tenga la
+    # versión anterior le sale la actualización, la acepta y le revienta con un error. Comprobado en MediaCastR.
+    # Publicar a medias es peor que no publicar: se aborta y no se toca el manifiesto que hay servido.
+    echo "  ❌ sin artifact de Windows para $BUILD y esta app publica Windows."
+    echo "     Abortado SIN tocar el portal: un manifiesto sin 'exe_win' hace cascar al updater de Windows."
+    echo "     Arregla el build de Windows y repite. Si de verdad quieres publicar solo Mac: PUBLISH_MAC_ONLY=1"
+    [ "${PUBLISH_MAC_ONLY:-0}" = "1" ] || exit 1
+    echo "     PUBLISH_MAC_ONLY=1 → sigo, bajo tu responsabilidad."
   fi
 fi
 
