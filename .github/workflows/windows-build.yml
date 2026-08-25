@@ -8,14 +8,10 @@ name: Windows build
 #    de ahí, calcula sha256, lo FIRMA con la clave Ed25519 de la suite y lo añade al release + latest.json.
 #  - NO usamos secretos cross-repo (ni RELEASES_TOKEN): el publish local se encarga de subirlo al release.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "**/*.py"
-      - "LoudnessFixR-win.spec"
-      - "requirements.txt"
-      - ".github/workflows/windows-build.yml"
-  workflow_dispatch: {}      # permite lanzarlo a mano desde la web
+  # ⚠️ NO se compila en cada push, A PROPÓSITO: cada build guarda un .exe de ~137 MB y la cuenta entera
+  # de GitHub tiene 500 MB de artifacts → Actions se bloqueó para TODOS los repos (25 ago 2026). El .exe
+  # solo hace falta al PUBLICAR: tools/publish_infomaniak.sh lo lanza si le falta (o `gh workflow run`).
+  workflow_dispatch: {}      # a mano, o desde el publish
 
 jobs:
   build:
