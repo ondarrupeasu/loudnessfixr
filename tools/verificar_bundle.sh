@@ -13,6 +13,11 @@
 # unrecognized» y verás un FALSO «dañado». `ditto` es lo que usan Finder/Archive Utility (= lo que hace el
 # usuario). Comprobado 2026-08-23: 8/8 apps daban firma VÁLIDA con ditto y falso fallo con unzip.
 #
+# ⚠️ Y NUNCA copies un `.app` con `cp -R`: no respeta los enlaces simbólicos de los frameworks y la app
+# muere al ARRANCAR saliendo con código 0 y SIN mensaje (fallo silencioso, dificilísimo de diagnosticar).
+# Para copiar/comprimir/montar cualquier `.app` (dmg incluido): `ditto`. Misma familia de fallo que los
+# symlinks colgando de la poda de Qt (detectado en MirroR/make_dmg.sh, 25 ago 2026).
+#
 # Uso:
 #   bash verificar_bundle.sh <ruta/al/App.app>                 # 3 chequeos estáticos (symlinks, firma, Gatekeeper)
 #   bash verificar_bundle.sh <App.app> --run "<cmd>" [--expect "texto"]

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- GLIFO SOLO (sin plato): el plato lo pone app_icon.py. Altavoz blanco + 3 ondas (izq),
+       varita mágica coral inclinada con destellos (der). Sin fondo, sin halo, sin clip. -->
+  <defs>
+    <path id="spark" d="M0,-1 C0.16,-0.16 0.16,-0.16 1,0 C0.16,0.16 0.16,0.16 0,1 C-0.16,0.16 -0.16,0.16 -1,0 C-0.16,-0.16 -0.16,-0.16 0,-1 Z"/>
+  </defs>
+
+  <!-- Speaker + 3 waves (white), LEFT -->
+  <g transform="translate(300 512) scale(1.15)">
+    <g fill="#f2f2f4">
+      <rect x="-140" y="-56" width="76" height="112" rx="18"/>
+      <path d="M -70 -56 L 22 -150 Q 40 -168 40 -140 L 40 140 Q 40 168 22 150 L -70 56 Z"/>
+    </g>
+    <g fill="none" stroke="#f2f2f4" stroke-width="26" stroke-linecap="round">
+      <path d="M 74 -46 Q 116 0 74 46"/>
+      <path d="M 120 -74 Q 180 0 120 74"/>
+      <path d="M 166 -104 Q 240 0 166 104"/>
+    </g>
+  </g>
+
+  <!-- Magic wand (coral), RIGHT, leaning left, tip up, stripes near tip -->
+  <g transform="translate(715 515) rotate(-25)">
+    <rect x="-24" y="-235" width="48" height="470" rx="24" fill="#ff5a4d"/>
+    <rect x="-26" y="-190" width="52" height="26" fill="#17191e"/>
+    <rect x="-26" y="-148" width="52" height="26" fill="#17191e"/>
+  </g>
+  <!-- Sparkles (5): main + four small, scattered around the tip -->
+  <g fill="#ff5a4d">
+    <use href="#spark" transform="translate(582 196) scale(80)"/>
+    <use href="#spark" transform="translate(726 190) scale(22)"/>
+    <use href="#spark" transform="translate(792 300) scale(27)"/>
+    <use href="#spark" transform="translate(505 300) scale(19)"/>
+    <use href="#spark" transform="translate(676 150) scale(15)"/>
+  </g>
+</svg>
