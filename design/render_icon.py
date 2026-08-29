@@ -30,26 +30,31 @@ PROJ = os.path.dirname(DESIGN)
 sys.path.insert(0, DESIGN)          # app_icon.py vive aquí (vendorizado)
 import app_icon                     # noqa: E402
 
-GLYPH_SVG = os.path.join(DESIGN, "loudnessfixr_glyph.svg")
+GLYPH_SVG = os.path.join(DESIGN, "loudnessfixr_glyph.svg")            # Mac (sobre plato oscuro)
+GLYPH_WIN_SVG = os.path.join(DESIGN, "loudnessfixr_glyph_win.svg")    # Windows (keyline, sin plato)
 
 
-def glyph_image(px: int = 1024) -> QImage:
-    """Rasteriza el glifo SVG a una QImage transparente de px×px."""
+def glyph_image(px: int = 1024, svg: str = GLYPH_SVG) -> QImage:
+    """Rasteriza un glifo SVG a una QImage transparente de px×px."""
     img = QImage(px, px, QImage.Format.Format_ARGB32_Premultiplied)
     img.fill(Qt.GlobalColor.transparent)
     p = QPainter(img)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    QSvgRenderer(GLYPH_SVG).render(p, QRectF(0, 0, px, px))
+    QSvgRenderer(svg).render(p, QRectF(0, 0, px, px))
     p.end()
     return img
 
 
 def main() -> None:
     QApplication(sys.argv[:1])
-    glyph = glyph_image(1024)
+    glyph = glyph_image(1024)                       # Mac: altavoz blanco limpio
+    glyph_win = glyph_image(1024, GLYPH_WIN_SVG)    # Windows: altavoz con keyline oscuro
 
     def icon(size: int) -> QImage:
-        return app_icon.render_image(size, glyph)   # plato + glifo, rasterizado con Qt
+        return app_icon.render_image(size, glyph)           # macOS: PLATO + glifo
+
+    def icon_win(size: int) -> QImage:
+        return app_icon.render_win_image(size, glyph_win)   # Windows: glifo SOLO, sin plato
 
     # --- .icns (iconset con todos los tamaños de Apple) ---
     iconset = tempfile.mkdtemp(suffix=".iconset")
@@ -62,23 +67,26 @@ def main() -> None:
     icns = os.path.join(DESIGN, "LoudnessFixR.icns")
     subprocess.run(["iconutil", "-c", "icns", iconset, "-o", icns], check=True)
 
-    # --- .ico (Windows): empaquetar PNGs YA rasterizados con Qt, magick solo ensambla ---
+    # --- .ico (Windows): GLIFO SOLO sin plato (render_win). PNGs Qt, magick solo ensambla ---
     icodir = tempfile.mkdtemp()
     ico_pngs = []
     for size in (16, 32, 48, 64, 128, 256):
         pth = os.path.join(icodir, f"{size}.png")
-        icon(size).save(pth)
+        icon_win(size).save(pth)
         ico_pngs.append(pth)
     ico = os.path.join(DESIGN, "loudnessfixr.ico")
     subprocess.run(["magick", *ico_pngs, ico], check=True)
 
-    # --- preview + logo del splash (mismo icono en runtime) ---
+    # --- preview (mac = con plato; win = sin plato, para revisar sobre fondo claro) ---
     icon(1024).save(os.path.join(DESIGN, "loudnessfixr_preview_1024.png"))
+    icon_win(1024).save(os.path.join(DESIGN, "loudnessfixr_preview_win_1024.png"))
+    # logo del splash (runtime, tarjeta oscura en ambas plataformas) = con plato
     icon(512).save(os.path.join(PROJ, "assets", "logo.png"))
 
     print("OK:", icns)
     print("OK:", ico)
     print("OK:", os.path.join(DESIGN, "loudnessfixr_preview_1024.png"))
+    print("OK:", os.path.join(DESIGN, "loudnessfixr_preview_win_1024.png"))
     print("OK:", os.path.join(PROJ, "assets", "logo.png"))
 
 

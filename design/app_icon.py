@@ -204,6 +204,55 @@ def render_image(size: int, glyph: QImage) -> QImage:
     return out
 
 
+# ------------------------------------------------------------------- variante WINDOWS
+# En Windows NO se usa el plato oscuro de macOS: queda fuera de lugar (el resto de iconos del
+# sistema no llevan tarjeta) y encoge el símbolo. Ahí va el GLIFO SOLO, sobre transparente y
+# llenando más el lienzo. Decisión de Alex (29 ago). El plato (render/plate) es SOLO para el
+# .icns de macOS; el .ico/.exe de Windows usa render_win.
+GLYPH_WIN = 0.92             # cuánto llena el glifo el lienzo en Windows (sin plato ni margen)
+
+
+def glyph_box_win(size: int) -> QRectF:
+    """Caja del glifo para Windows: casi todo el lienzo, centrada (sin plato ni margen)."""
+    lado = size * GLYPH_WIN
+    off = (size - lado) / 2
+    return QRectF(off, off, lado, lado)
+
+
+def glyph_box_win_tuple(size: int) -> tuple[int, int, int, int]:
+    b = glyph_box_win(size)
+    return (int(round(b.x())), int(round(b.y())),
+            int(round(b.width())), int(round(b.height())))
+
+
+def render_win(size: int, draw_glyph) -> QImage:
+    """Icono de WINDOWS: el glifo SOLO sobre fondo TRANSPARENTE, sin plato ni margen, llenando el
+    lienzo. `draw_glyph(painter, caja)` igual que en `render()`. Úsalo para el `.ico`/`.exe` y el
+    PNG de `setWindowIcon` de Windows. (macOS sigue con `render()` = con plato.)"""
+    out = QImage(size, size, QImage.Format.Format_ARGB32_Premultiplied)
+    out.fill(Qt.GlobalColor.transparent)
+    p = QPainter(out)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    draw_glyph(p, glyph_box_win(size))
+    p.end()
+    return out
+
+
+def render_win_image(size: int, glyph: QImage) -> QImage:
+    """Como `render_win()`, pero recibe el glifo YA dibujado (QImage) y lo recorta a su contenido
+    + escala para llenar el lienzo. Para apps que tienen el glifo como imagen."""
+    out = QImage(size, size, QImage.Format.Format_ARGB32_Premultiplied)
+    out.fill(Qt.GlobalColor.transparent)
+    crop, target = fit_glyph(glyph, glyph_box_win(size))
+    p = QPainter(out)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    p.drawImage(target, crop)
+    p.end()
+    return out
+
+
 # ------------------------------------------------------------------- puente a PIL (AirCastR)
 def qimage_to_pil(img: QImage):
     """Convierte una QImage a PIL.Image RGBA (para apps que pintan su glifo con Pillow)."""
