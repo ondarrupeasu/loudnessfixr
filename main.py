@@ -70,7 +70,7 @@ def main():
 
     # Menú Ayuda → Buscar actualizaciones (chequeo manual con aviso "estás al día")
     _help = win.menuBar().addMenu("Ayuda")
-    _act = QAction("Buscar actualizaciones…", win)
+    _act = QAction("Check for updates…", win)
     _act.setMenuRole(QAction.NoRole)             # evita que macOS lo reubique en el menú de la app
     _act.triggered.connect(lambda: check_and_prompt(win, win._updater, notify_none=True))
     _help.addAction(_act)

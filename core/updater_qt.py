@@ -28,6 +28,17 @@ try:  # robusto para vendorizar en layout de paquete o plano
 except ImportError:  # pragma: no cover
     from updater_core import Updater  # type: ignore
 
+# Barra de título OSCURA en Windows (no-op en Mac). Se aplica desde check_and_prompt, que TODAS las
+# apps llaman con su ventana principal al arrancar → un solo sitio para toda la suite. Opcional: si
+# no está vendorizado, no pasa nada.
+try:
+    from . import win_titlebar as _win_titlebar
+except Exception:  # pragma: no cover
+    try:
+        import win_titlebar as _win_titlebar  # type: ignore
+    except Exception:
+        _win_titlebar = None
+
 log = logging.getLogger("cinemafilmak.updater.qt")
 
 
@@ -64,6 +75,11 @@ def check_and_prompt(parent, updater: Updater, notify_none: bool = False) -> Non
     """Lanza la comprobación de updates en segundo plano. No bloquea.
     - Automático al arrancar (notify_none=False): solo si la app está empaquetada; silencioso si estás al día.
     - Manual desde menú (notify_none=True): comprueba SIEMPRE y avisa también si estás al día o si falló la comprobación."""
+    if _win_titlebar is not None:            # barra de título oscura en Windows (no-op en Mac)
+        try:
+            _win_titlebar.apply(parent)
+        except Exception:
+            pass
     if not notify_none and not bool(getattr(sys, "frozen", False)):
         return
     updater.cleanup_windows_backup()   # limpia un <App>.old.exe que dejara una actualización previa (Windows)
