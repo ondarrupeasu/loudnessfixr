@@ -133,15 +133,20 @@ def line_edit(accent):
 
 
 def scrollbar():
-    """Scrollbar de la casa: 8px, sin flechas, nunca la del sistema (regla de familia)."""
-    return ("QScrollBar:vertical{background:transparent;width:8px;margin:0;}"
+    """Scrollbar de la casa: 8px, sin flechas, nunca la del sistema (regla de familia).
+
+    ⚠️ La ESQUINA (donde se cruzan la barra vertical y la horizontal) hay que estilarla también: si no, Qt
+    pinta ahí el cuadradito NATIVO de macOS — el "resquicio de las barras viejas" que se cuela cuando aparecen
+    las dos barras a la vez. `QAbstractScrollArea::corner` transparente lo destierra (detectado en MediaDriveR)."""
+    return ("QScrollBar:vertical{background:transparent;width:8px;margin:0;border:none;}"
             "QScrollBar::handle:vertical{background:#3d3e47;border-radius:4px;min-height:24px;}"
             "QScrollBar::handle:vertical:hover{background:#55565e;}"
-            "QScrollBar:horizontal{background:transparent;height:8px;margin:0;}"
+            "QScrollBar:horizontal{background:transparent;height:8px;margin:0;border:none;}"
             "QScrollBar::handle:horizontal{background:#3d3e47;border-radius:4px;min-width:24px;}"
             "QScrollBar::handle:horizontal:hover{background:#55565e;}"
             "QScrollBar::add-line,QScrollBar::sub-line{background:none;border:none;width:0;height:0;}"
-            "QScrollBar::add-page,QScrollBar::sub-page{background:transparent;}")
+            "QScrollBar::add-page,QScrollBar::sub-page{background:transparent;}"
+            "QAbstractScrollArea::corner{background:transparent;border:none;}")
 
 
 def slider(accent, accent2=None):
@@ -212,10 +217,10 @@ def small_buttons(accent):
 
 
 def checkbox(accent):
-    """Checkbox CANÓNICO (Alex 31 ago): indicador 14px, radio 4 (cuadrado redondeado), marcado = relleno
-    coral; hover = borde coral. Ya era casi unánime en la suite."""
+    """Checkbox CANÓNICO (Alex 31 ago): indicador 12px, radio 3 (cuadrado redondeado), marcado = relleno
+    coral; hover = borde coral. (Bajado de 14→12px el 1 sep: al lado de un puntito de estado se veía pesado.)"""
     return (f"QCheckBox{{background:transparent;spacing:8px;color:{TEXT};}}"
-            f"QCheckBox::indicator{{width:14px;height:14px;border:1px solid {LINE};border-radius:4px;background:{INPUT};}}"
+            f"QCheckBox::indicator{{width:12px;height:12px;border:1px solid {LINE};border-radius:3px;background:{INPUT};}}"
             f"QCheckBox::indicator:hover{{border-color:{accent};}}"
             f"QCheckBox::indicator:checked{{background:{accent};border-color:{accent};}}"
             f"QCheckBox::indicator:disabled{{border-color:{LINE_SOFT};background:#191a1f;}}")
@@ -226,7 +231,7 @@ def radio(accent):
     (clásico, radial-gradient: coral dentro, hueco, borde coral) → se diferencia del checkbox, que se
     rellena entero. Hover = borde coral."""
     return (f"QRadioButton{{background:transparent;spacing:8px;color:{TEXT};}}"
-            f"QRadioButton::indicator{{width:14px;height:14px;border:1px solid {LINE};border-radius:7px;background:{INPUT};}}"
+            f"QRadioButton::indicator{{width:12px;height:12px;border:1px solid {LINE};border-radius:6px;background:{INPUT};}}"
             f"QRadioButton::indicator:hover{{border-color:{accent};}}"
             f"QRadioButton::indicator:checked{{border:1px solid {accent};"
             f"background:qradialgradient(cx:0.5,cy:0.5,radius:0.5,fx:0.5,fy:0.5,"
