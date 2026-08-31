@@ -10,6 +10,8 @@
 #   PY           intérprete con 'cryptography' (p.ej. ".venv/bin/python")
 #   BUILD_CMD    cómo leer __build__ (p.ej. "import mediacastr; print(mediacastr.__build__)")
 #   WIN_SRC_REPO repo con windows-build.yml; VACÍO = app solo-Mac
+#   BUILD_FILE   (opcional, SOLO si hay WIN_SRC_REPO) ruta relativa del fichero con __build__ (p.ej.
+#                "mirror/__init__.py"); activa la guarda de "bump sin empujar" (el CI de Win compila del remoto)
 #   FILE         (opcional) nombre de los FICHEROS hospedados si difiere de APP (launchr: sin espacios)
 #
 # Origen canónico: launchr (build 2026-08-25k), que estrenó auto-dispatch + verificación de lo servido.
@@ -23,6 +25,64 @@ NOTES="${1:-Build $BUILD}"
 OUT="$PROJ/dist"; BASEURL="https://apps.cinemafilmak.com/update/$SLUG"
 
 [ -d "dist/$APP.app" ] || { echo "No hay 'dist/$APP.app' — constrúyelo antes (pyinstaller tu .spec)."; exit 1; }
+
+# ⚠️ El build del manifiesto se lee del CÓDIGO, pero lo que se empaqueta es lo que haya en dist/. Si subes
+# `__build__` y publicas sin recompilar, el manifiesto anuncia una versión y el zip lleva otra: el actualizador
+# instala, sigue viendo la vieja y VUELVE A OFRECER la actualización — bucle infinito para el usuario. Pasó de
+# verdad, y a tres apps a la vez (AirCastR 29a/30b, AudioPatchR 29a/30a, VideoCatchR 21l/30a): no fueron tres
+# despistes, era este agujero. Se comprueba antes de tocar el portal.
+BUILD_APP="$(/usr/bin/defaults read "$PROJ/dist/$APP.app/Contents/Info.plist" CFBundleVersion 2>/dev/null)"
+# FAIL-CLOSED: "no puedo verificar" NO es "está bien". Tres casos:
+if [ -z "$BUILD_APP" ]; then
+  # (c) la app no escribe su build en el Info.plist → el launcher la lee mal SIEMPRE → bucle permanente
+  #     que republicar no arregla (le pasó a PostHandleR: plist clavado en "1.0"). Arreglar la .spec ANTES.
+  echo "❌ NO publico: el .app no declara CFBundleVersion → no puedo verificar que sea de este build."
+  echo "   Arregla tu .spec para que escriba __build__ en las DOS claves del Info.plist"
+  echo "   (receta: mirror/tools/MirroR.spec:60-61, regex sobre el fichero de versión, SIN importar el paquete):"
+  echo '     "CFBundleShortVersionString": _BUILD,   "CFBundleVersion": _BUILD,'
+  exit 1
+fi
+if [ "$BUILD_APP" != "$BUILD" ]; then
+  # (b) EL bug: dist/ viejo (no recompilaste) → manifiesto anuncia una versión y el zip lleva otra.
+  echo "❌ NO publico: el .app empaquetado es $BUILD_APP y el código dice $BUILD."
+  echo "   dist/ está viejo. Recompila y vuelve a intentarlo:"
+  echo "     rm -rf build dist && .venv/bin/python -m PyInstaller --noconfirm tools/$APP.spec"
+  echo "   (Mejor: usa tools/build_mac.sh, que borra dist/ antes de compilar y esto no puede pasar.)"
+  exit 1
+fi
+# (a) coincide → seguimos.
+
+# Ángulo Windows/CI: el .exe lo compila el CI desde la rama REMOTA. Si el bump de __build__ está sin
+# commitear/empujar, el CI compila la versión ANTERIOR (portal nuevo, .exe viejo — le pasó a MirroR).
+# Solo aplica si hay build de Windows y el wrapper declaró BUILD_FILE (dónde vive __build__, ruta relativa).
+if [ -n "${WIN_SRC_REPO:-}" ]; then
+  # FAIL-CLOSED también aquí: si el wrapper no declaró BUILD_FILE, lo DERIVAMOS del BUILD_CMD (todas lo tienen
+  # y lleva el paquete dentro). Si aun así no se localiza el fichero → ABORTA (no saltarse la guarda en
+  # silencio: "no puedo verificar" ≠ "está bien"). Sin esto, la guarda solo protegía a la única app que
+  # declara BUILD_FILE (mirror) y quedaba apagada en las otras 8 sin avisar.
+  # Deriva del BUILD_CMD si el wrapper no lo declaró: prueba <pkg>/__init__.py y luego <pkg>.py. No cubre
+  # paquetes bajo subdir (app/, src/) ni BUILD_CMD que no importan su paquete (livemixr lee su fichero con
+  # regex) → esos declaran BUILD_FILE a mano. IMPORTANTE: si no se localiza, esta guarda (SECUNDARIA, para el
+  # .exe de Windows) AVISA pero NO bloquea — bloquear aquí frenaría publishes legítimos (p.ej. PostHandleR
+  # republicando). El gate de CFBundleVersion de arriba, que es el que caza EL bug, sí es fail-closed.
+  if [ -z "${BUILD_FILE:-}" ]; then
+    _pkg="$(printf '%s' "$BUILD_CMD" | sed -n 's/.*import \([A-Za-z_][A-Za-z0-9_]*\).*/\1/p' | head -1)"
+    for _cand in "$_pkg/__init__.py" "$_pkg.py"; do [ -n "$_pkg" ] && [ -f "$PROJ/$_cand" ] && { BUILD_FILE="$_cand"; break; }; done
+  fi
+  if [ -z "${BUILD_FILE:-}" ] || [ ! -f "$PROJ/$BUILD_FILE" ]; then
+    echo "⚠️  No localizo el fichero de __build__ (declara BUILD_FILE en tu wrapper: ruta relativa del fichero"
+    echo "    con __build__) → NO verifico que el bump esté empujado; el CI de Windows podría compilar la versión"
+    echo "    anterior. (El binario de Mac SÍ está protegido por el gate de CFBundleVersion de arriba.)"
+  elif git -C "$PROJ" rev-parse @{u} >/dev/null 2>&1; then
+    git -C "$PROJ" diff --quiet @{u} -- "$BUILD_FILE" || {
+      echo "❌ NO publico: '$BUILD_FILE' no coincide con el remoto (@{u}): cambios sin commitear o sin empujar."
+      echo "   El CI de Windows compila desde el remoto → el .exe saldría con la versión ANTERIOR. Commit + push y reintenta."
+      exit 1; }
+  elif [ -n "$(git -C "$PROJ" status --porcelain -- "$BUILD_FILE" 2>/dev/null)" ]; then
+    echo "❌ NO publico: '$BUILD_FILE' con cambios sin commitear y sin rama de seguimiento para verificar el push."
+    exit 1
+  fi
+fi
 ENVF="$HOME/.cinemafilmak/infomaniak_apps_ftp.env"
 [ -f "$ENVF" ] || { echo "Falta $ENVF (credenciales FTPS)."; exit 1; }
 set -a; . "$ENVF"; set +a
