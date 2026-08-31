@@ -9,6 +9,7 @@ from core.updater_core import Updater, UpdaterConfig
 from core.updater_qt import check_and_prompt
 from core.splash import Splash
 from core.report import report_dialog
+from core import theme as _theme  # base compartida de la familia (shared/theme.py vendorizado)
 
 
 def _logo_path():
@@ -16,36 +17,24 @@ def _logo_path():
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, "assets", "logo.png")
 
-DARK_QSS = """
-QWidget { background: #0e0f12; color: #f2f2f4; font-size: 12px; }
+# TODO lo común (botones, #Primary, inputs, tabla, menú, scrollbar…) sale de la Casa de Estilo con una línea;
+# encima, SOLO lo propio de LoudnessFixR: grupos, steppers del spinbox y el fader VERTICAL de ganancia.
+DARK_QSS = _theme.full_qss("#ff5a4d", "#ff7d72") + """
 QGroupBox { border: 1px solid #2a2b32; border-radius: 8px; margin-top: 8px; padding-top: 12px; font-weight: bold; }
 QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; }
-QPushButton { background: #1c1d23; border: 1px solid #2a2b32; border-radius: 4px; padding: 4px 8px; }
-QPushButton:hover { border-color: #ff5a4d; }
-QPushButton:disabled { color: #5a5b63; }
-QPushButton#Primary { background: #ff5a4d; border: 1px solid #ff5a4d; color: #14060a; font-weight: bold; }
-QPushButton#Primary:hover { background: #ff7d72; border-color: #ff7d72; }
-QPushButton#Primary:disabled { background: #3a2226; border-color: #3a2226; color: #6b6c74; }
-QLineEdit, QComboBox, QDoubleSpinBox, QTableWidget { background: #1c1d23; border: 1px solid #2a2b32; border-radius: 4px; padding: 2px 4px; }
-QDoubleSpinBox { padding-right: 2px; }
-QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
-    width: 18px;
-    border-left: 1px solid #2a2b32;
-    background: #242530;
-}
-QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover { background: #2a2b32; }
-QDoubleSpinBox::up-arrow, QDoubleSpinBox::down-arrow { width: 9px; height: 9px; }
-QSlider::groove:vertical { background: #1c1d23; width: 6px; border-radius: 3px; }
-QSlider::handle:vertical { background: #ff5a4d; height: 14px; margin: 0 -4px; border-radius: 4px; }
 QHeaderView::section { background: #16171c; border: none; padding: 4px; }
-QScrollBar:vertical { background: transparent; width: 8px; margin: 0; }
-QScrollBar::handle:vertical { background: #3d3e47; border-radius: 4px; min-height: 24px; }
-QScrollBar::handle:vertical:hover { background: #55565e; }
-QScrollBar:horizontal { background: transparent; height: 8px; margin: 0; }
-QScrollBar::handle:horizontal { background: #3d3e47; border-radius: 4px; min-width: 24px; }
-QScrollBar::handle:horizontal:hover { background: #55565e; }
-QScrollBar::add-line, QScrollBar::sub-line { background: none; border: none; width: 0; height: 0; }
-QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+/* Steppers −/+ de ganancia y target: son QPushButton estrechos (setFixedWidth 26). El botón canónico lleva
+   padding 6×13 → en 26px de ancho el padding se come el glifo y sale VACÍO. Este #Step lo pone a padding 0 y
+   centra el −/+ grande y legible (también en disabled, con menos contraste pero visible). */
+QPushButton#Step { background: #242530; border: 1px solid #2a2b32; border-radius: 7px;
+                   color: #e6e7ea; font-size: 16px; font-weight: 600; padding: 0; }
+QPushButton#Step:hover { border-color: #ff5a4d; color: #ff5a4d; }
+QPushButton#Step:pressed { background: #2a2b32; }
+QPushButton#Step:disabled { color: #7a7b83; background: #191a1f; border-color: #212228; }
+/* Fader VERTICAL de ganancia — adaptado a la mecánica de la familia: barra fina + marca (aquí horizontal) */
+QSlider::groove:vertical { background: #161a22; width: 4px; border-radius: 2px; }
+QSlider::sub-page:vertical { background: #ff5a4d; width: 4px; border-radius: 2px; }
+QSlider::handle:vertical { background: #ff5a4d; height: 4px; margin: 0 -6px; border-radius: 2px; }
 """
 
 

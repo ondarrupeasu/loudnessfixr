@@ -25,10 +25,10 @@ from PySide6.QtGui import QPixmap, QPainter, QColor, QFont, QPainterPath, QIcon
 from PySide6.QtWidgets import QSplashScreen, QApplication
 
 # Paleta casa de estilo (idéntica a la de las apps)
-_BG      = QColor("#0e0f12")
-_BORDER  = QColor("#2a2b32")
-_INK     = QColor("#f2f2f4")
-_MUTED   = QColor("#8a8a92")
+_BG      = QColor("#16181a")
+_BORDER  = QColor("#2a2d31")
+_INK     = QColor("#e7e5df")
+_MUTED   = QColor("#7a7d82")
 _CORAL   = QColor("#ff5a4d")
 
 _W, _H   = 460, 300          # tamaño lógico del splash

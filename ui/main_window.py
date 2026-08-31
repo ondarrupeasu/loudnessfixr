@@ -100,6 +100,7 @@ class ChannelStrip(QWidget):
         gain_row.setSpacing(2)
 
         self.gain_down_btn = QPushButton("−")
+        self.gain_down_btn.setObjectName("Step")
         self.gain_down_btn.setFixedWidth(26)
         self.gain_down_btn.setEnabled(False)
         self.gain_down_btn.clicked.connect(lambda: self.gain_spin.stepBy(-1))
@@ -119,6 +120,7 @@ class ChannelStrip(QWidget):
         gain_row.addWidget(self.gain_spin, 1)
 
         self.gain_up_btn = QPushButton("+")
+        self.gain_up_btn.setObjectName("Step")
         self.gain_up_btn.setFixedWidth(26)
         self.gain_up_btn.setEnabled(False)
         self.gain_up_btn.clicked.connect(lambda: self.gain_spin.stepBy(1))
@@ -299,9 +301,11 @@ class MainWindow(QMainWindow):
         self.target_spin.valueChanged.connect(self._update_global)
 
         self.target_down_btn = QPushButton("−")
+        self.target_down_btn.setObjectName("Step")
         self.target_down_btn.setFixedWidth(26)
         self.target_down_btn.clicked.connect(lambda: self.target_spin.stepBy(-1))
         self.target_up_btn = QPushButton("+")
+        self.target_up_btn.setObjectName("Step")
         self.target_up_btn.setFixedWidth(26)
         self.target_up_btn.clicked.connect(lambda: self.target_spin.stepBy(1))
 

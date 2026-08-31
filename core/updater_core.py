@@ -295,6 +295,23 @@ class Updater:
                 log.info("update: limpiado respaldo %s", old.name)
         except Exception as e:  # noqa: BLE001
             log.info("update: no pude limpiar el .old.exe: %s", e)
+        # Instalación en CARPETA (onedir): el respaldo es un directorio hermano, y los
+        # restos del ZIP/extracción quedan al lado si el swap no llegó a limpiarlos.
+        try:
+            import shutil
+            app_dir = Path(sys.executable).parent
+            padre = app_dir.parent
+            vieja = padre / f".{app_dir.name}.old"
+            if vieja.is_dir():
+                shutil.rmtree(vieja, ignore_errors=True)
+                log.info("update: limpiado respaldo %s", vieja.name)
+            for resto in padre.glob(f".{app_dir.name}.*"):
+                if resto.suffix == ".zip" and resto.is_file():
+                    resto.unlink(missing_ok=True)
+                elif resto.name.endswith(".new") and resto.is_dir():
+                    shutil.rmtree(resto, ignore_errors=True)
+        except Exception as e:  # noqa: BLE001
+            log.info("update: no pude limpiar el respaldo de carpeta: %s", e)
 
     def apply_update(self, info: dict, on_progress=None) -> dict | None:
         """Descarga el nuevo build (verificando min_version + sha256 + firma) y lanza el reemplazo
@@ -309,11 +326,36 @@ class Updater:
             return self._apply_windows(info, on_progress)
         return self._apply_macos(info, on_progress)
 
+    def _es_instalacion_en_carpeta(self) -> bool:
+        """¿Esta app está instalada como CARPETA (onedir) o como un .exe suelto (onefile)?
+
+        PyInstaller onedir deja `_internal/` junto al ejecutable; onefile no (se
+        descomprime en un temporal). De esto depende qué se puede reemplazar."""
+        try:
+            return (Path(sys.executable).parent / "_internal").is_dir()
+        except Exception:
+            return False
+
     def _apply_windows(self, info: dict, on_progress=None) -> dict:
-        """Windows: swap EN EL SITIO sin auto-relanzar. Requiere carpeta escribible (no Program Files)."""
+        """Windows: swap EN EL SITIO sin auto-relanzar. Requiere carpeta escribible (no Program Files).
+
+        Dos formatos, según lo que publique el manifiesto:
+          - `zip_win`: la app es una CARPETA (onedir). Se reemplaza la carpeta entera.
+          - `exe_win`: la app es un .exe único (onefile). Se sustituye el .exe.
+        PostHandleR pasó a carpeta porque en .exe único tardaba ~25-30 s en abrirse (se
+        despliega entero en un temporal NUEVO cada vez y carga Qt desde ahí); en carpeta
+        abre en <1 s. Las demás apps siguen en .exe único, y por eso conviven las dos rutas.
+        """
+        if info.get("zip_win"):
+            return self._apply_windows_carpeta(info, on_progress)
         url = info.get("exe_win")
         if not url:
             raise RuntimeError("no-windows-build")
+        if self._es_instalacion_en_carpeta():
+            # Instalado como carpeta pero solo hay .exe suelto publicado: sustituir el
+            # .exe dejaría `_internal/` viejo al lado y la app no arrancaría.
+            raise RuntimeError("update-incompatible: esta instalación es una carpeta y "
+                               "la actualización publicada es un .exe suelto")
         build = str(info.get("build", "new"))
         target = Path(sys.executable)
         folder = target.parent
@@ -353,6 +395,98 @@ class Updater:
         subprocess.Popen(["wscript.exe", "//nologo", str(vbs)],
                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), close_fds=True)
         log.info("Actualización (Windows) descargada; swap al cerrar, sin relanzar.")
+        return {"in_place": True, "build": build}
+
+    def _apply_windows_carpeta(self, info: dict, on_progress=None) -> dict:
+        """Windows ONEDIR: descarga el ZIP, lo extrae al lado y reemplaza la CARPETA.
+
+        La app vive en `<carpeta>/PostHandleR.exe` con `_internal/` al lado, así que no
+        vale sustituir un archivo: hay que cambiar el directorio entero. El .bat espera
+        a que muera este proceso (si no, el .exe está bloqueado), renombra la carpeta
+        vieja, pone la nueva en su sitio y borra la vieja. La ruta final NO cambia, así
+        que los accesos directos del usuario siguen valiendo.
+        """
+        url = info["zip_win"]
+        build = str(info.get("build", "new"))
+        app_dir = Path(sys.executable).parent
+        if not self._es_instalacion_en_carpeta():
+            # Vienes de un .exe suelto (onefile). La nueva versión es una carpeta y
+            # colgaría de otra ruta: los accesos directos se romperían. Se pide
+            # instalación manual, UNA vez; a partir de ahí ya se actualiza sola.
+            raise RuntimeError(
+                "update-manual: esta versión cambia el formato de instalación (de un "
+                ".exe suelto a una carpeta, para que la app abra en segundos). Descarga "
+                "e instala esta versión a mano una vez; las siguientes ya se actualizan solas.")
+
+        padre = app_dir.parent
+        zip_tmp = padre / f".{app_dir.name}.{build}.zip"
+        extraido = padre / f".{app_dir.name}.{build}.new"
+        try:
+            self._download(url, zip_tmp, on_progress)
+        except (OSError, PermissionError) as e:
+            raise RuntimeError(f"no puedo escribir junto a la app ({padre}). "
+                               f"Muévela a una carpeta de usuario (no Program Files). Detalle: {e}")
+        self._verify_sha(zip_tmp, info.get("sha256_win"))
+        self._verify_sig(build, "win", info.get("sha256_win"), info.get("sig_win"))
+
+        # Extraer ANTES de tocar nada: si el ZIP viene corrupto, la app sigue intacta.
+        import shutil
+        import zipfile
+        if extraido.exists():
+            shutil.rmtree(extraido, ignore_errors=True)
+        try:
+            with zipfile.ZipFile(zip_tmp) as z:
+                z.extractall(extraido)
+        except Exception as e:
+            shutil.rmtree(extraido, ignore_errors=True)
+            zip_tmp.unlink(missing_ok=True)
+            raise RuntimeError(f"el ZIP de la actualización no se pudo extraer: {e}")
+
+        # El ZIP lleva la carpeta de la app dentro; si es así, se usa esa.
+        raiz = extraido
+        hijos = [h for h in extraido.iterdir()]
+        if len(hijos) == 1 and hijos[0].is_dir():
+            raiz = hijos[0]
+        if not (raiz / Path(sys.executable).name).is_file():
+            shutil.rmtree(extraido, ignore_errors=True)
+            zip_tmp.unlink(missing_ok=True)
+            raise RuntimeError("el ZIP no contiene el ejecutable esperado")
+
+        pid = os.getpid()
+        vieja = padre / f".{app_dir.name}.old"
+        tmp = Path(tempfile.mkdtemp(prefix="cf-update-"))
+        bat = tmp / "swap.bat"
+        bat.write_text(
+            "@echo off\r\n"
+            # cd fuera de la carpeta de la app: si el .bat corriera DENTRO no se podría renombrar.
+            f'cd /d "{tmp}"\r\n'
+            ":wait\r\n"
+            f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul && ('
+            ' timeout /t 1 /nobreak >nul & goto wait )\r\n'
+            f'if exist "{vieja}" rmdir /s /q "{vieja}" >nul 2>&1\r\n'
+            f'move /y "{app_dir}" "{vieja}" >nul 2>&1\r\n'
+            f'move /y "{raiz}" "{app_dir}" >nul 2>&1\r\n'
+            # Si mover la nueva falló, devolver la vieja a su sitio: nunca dejar al
+            # usuario sin app.
+            f'if not exist "{app_dir}" move /y "{vieja}" "{app_dir}" >nul 2>&1\r\n'
+            "set /a k=0\r\n"
+            ":delold\r\n"
+            f'rmdir /s /q "{vieja}" >nul 2>&1\r\n'
+            f'if not exist "{vieja}" goto limpia\r\n'
+            "set /a k+=1\r\n"
+            "if %k% geq 8 goto limpia\r\n"
+            "timeout /t 1 /nobreak >nul\r\n"
+            "goto delold\r\n"
+            ":limpia\r\n"
+            f'rmdir /s /q "{extraido}" >nul 2>&1\r\n'
+            f'del /f /q "{zip_tmp}" >nul 2>&1\r\n',
+            encoding="utf-8")
+        vbs = tmp / "swap.vbs"
+        vbs.write_text(f'CreateObject("WScript.Shell").Run "cmd /c ""{bat}""", 0, False\r\n',
+                       encoding="utf-8")
+        subprocess.Popen(["wscript.exe", "//nologo", str(vbs)],
+                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), close_fds=True)
+        log.info("Actualización (Windows, carpeta) descargada; swap al cerrar, sin relanzar.")
         return {"in_place": True, "build": build}
 
     def _stable_install_target(self) -> Path:
