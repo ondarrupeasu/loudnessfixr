@@ -218,8 +218,13 @@ def small_buttons(accent):
 
 def checkbox(accent):
     """Checkbox CANÓNICO (Alex 31 ago): indicador 12px, radio 3 (cuadrado redondeado), marcado = relleno
-    coral; hover = borde coral. (Bajado de 14→12px el 1 sep: al lado de un puntito de estado se veía pesado.)"""
-    return (f"QCheckBox{{background:transparent;spacing:8px;color:{TEXT};}}"
+    coral; hover = borde coral. (Bajado de 14→12px el 1 sep: al lado de un puntito de estado se veía pesado.)
+
+    ⚠️ min-height:20px OBLIGATORIO: con el indicador estilado, QWidgetItem calcula mal el alto del QCheckBox
+    (dice 8px aunque se dibuje a ~15) y las casillas APILADAS en columna se solapan entre sí y con su texto.
+    `setMinimumHeight` en el widget NO lo corrige; el min-height en el QSS sí. (Lo acorraló la sesión de
+    MirroR el 1 sep; afecta a cualquier app con casillas en columna.)"""
+    return (f"QCheckBox{{background:transparent;spacing:8px;color:{TEXT};min-height:20px;}}"
             f"QCheckBox::indicator{{width:12px;height:12px;border:1px solid {LINE};border-radius:3px;background:{INPUT};}}"
             f"QCheckBox::indicator:hover{{border-color:{accent};}}"
             f"QCheckBox::indicator:checked{{background:{accent};border-color:{accent};}}"
