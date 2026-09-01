@@ -447,7 +447,8 @@ class MainWindow(QMainWindow):
         self._size_combo(combo, [it[1] for it in items])
 
     def retranslate_ui(self):
-        self.setWindowTitle(i18n.tr('window_title'))
+        import version
+        self.setWindowTitle(f"{i18n.tr('window_title')} · {version.__build__}")   # versión SIEMPRE visible (regla de la casa)
 
         self.mode_label.setText(i18n.tr('mode_label'))
         self._retranslate_combo(self.mode_combo, [
