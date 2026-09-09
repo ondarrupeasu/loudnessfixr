@@ -195,7 +195,7 @@ class Updater:
     def _cached_valid_until(self) -> str:
         """`valid_until` firmado guardado en local, o '' si no hay / no verifica (→ se ignora)."""
         try:
-            d = json.loads(self._lease_path().read_text())
+            d = json.loads(self._lease_path().read_text(encoding="utf-8"))
             vu, sig = str(d.get("valid_until", "")), str(d.get("sig_lease", ""))
             return vu if self._verify_lease(vu, sig) else ""
         except Exception:  # noqa: BLE001
