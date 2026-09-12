@@ -1,9 +1,17 @@
-numpy
-scipy
-soundfile
-pyloudnorm
-imageio-ffmpeg
-PySide6
-sounddevice
-cryptography
+# Versiones CLAVADAS. En una app de loudness (R128) un bump silencioso de numpy/scipy/pyloudnorm
+# cambia la MEDIDA sin dar ningún error → dev (Mac) y CI (Windows) DEBEN instalar lo mismo.
+# Congelado del venv que funciona (2026-09-12). Ver missioncontrol/briefs/DEPENDENCIAS_SIN_CLAVAR.md.
+# Al subir una versión: reinstalar, correr test_loudness.py (invariantes) y re-congelar.
+
+# --- matemática del R128 (NO desclavar sin re-verificar los tests de loudness) ---
+numpy==2.4.6
+scipy==1.17.1
+pyloudnorm==0.2.0
+soundfile==0.14.0
+
+# --- resto ---
+sounddevice==0.5.5
+imageio-ffmpeg==0.6.0
+PySide6==6.11.1
+cryptography==50.0.0
 certifi
