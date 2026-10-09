@@ -16,6 +16,10 @@ COPIADOS VERBATIM de su b/theme.py ya consolidado, para que pueda borrar el suyo
 un solo pixel de cambio. PostHandleR aporta su theme.qss como input para fijar inputs/tokens finos.
 """
 
+import os
+import tempfile
+from pathlib import Path
+
 # ---- Tokens de la FAMILIA (paleta fría azulada; la referencia es AirCastR/VideoCatchR/AudioPatchR) ----
 # El acento va SIEMPRE por parámetro (cada app pasa el suyo; la familia usa coral #ff5a4d).
 BG        = "#0e0f12"   # fondo de ventana (frío, ligeramente azulado)
@@ -107,16 +111,79 @@ def ghost(accent):
             f"QPushButton#Ghost:hover{{border-color:{accent};color:{TEXT};}}")
 
 
+_COMBO_ARROW_PATH = None
+_SPIN_ARROWS = None
+
+
+def _combo_arrow_path() -> str:
+    """Ruta (que Qt acepta) a un CHEVRÓN SVG de verdad, escrito una vez a un temporal.
+
+    Sustituye el viejo «truco del triángulo con bordes CSS» que en Qt Style Sheets NO recortaba un
+    triángulo: pintaba la caja del subcontrol y salía un CUADRADITO gris (ver
+    briefs/COMBO_FLECHA_ES_UN_CUADRADO.md; lo sufrían 13 apps y cada una lo parcheaba en local).
+    Autocontenido a propósito: el SVG va embebido y se escribe al vuelo, así la casa de estilo arregla
+    la flecha para TODAS sin distribuir un asset ni cablear cada app. Devuelve "" si no pudo escribir
+    (fail-safe: entonces se deja sin flecha propia y Qt pone la suya, mejor que un `url()` roto)."""
+    global _COMBO_ARROW_PATH
+    if _COMBO_ARROW_PATH is not None:
+        return _COMBO_ARROW_PATH
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6">'
+           f'<path d="M1 1 L5 5 L9 1" fill="none" stroke="{MUTED}" stroke-width="1.6" '
+           f'stroke-linecap="round" stroke-linejoin="round"/></svg>').encode()
+    try:
+        # uid en el nombre: en un Mac/Linux MULTIUSUARIO con /tmp compartido, un nombre fijo hace que
+        # el segundo usuario choque con el fichero del primero (PermissionError → sin flecha). En Windows
+        # el temp ya es por usuario, pero el uid no molesta. (getuid no existe en Windows → fallback.)
+        _uid = getattr(os, "getuid", lambda: os.environ.get("USERNAME", "u"))()
+        p = Path(tempfile.gettempdir()) / f"cinemafilmak-combo-arrow-{_uid}.svg"
+        if not p.exists() or p.read_bytes() != svg:
+            p.write_bytes(svg)
+        _COMBO_ARROW_PATH = str(p).replace("\\", "/")   # Qt quiere barras normales también en Windows
+    except Exception:  # noqa: BLE001
+        _COMBO_ARROW_PATH = ""
+    return _COMBO_ARROW_PATH
+
+
+def _spin_arrow_paths():
+    """(ruta_arriba, ruta_abajo) a dos chevrones SVG (▲▼) para los QSpinBox/QDoubleSpinBox — MISMO método
+    que el combo (imagen SVG, NO el truco de bordes que en Qt pinta un cuadradito, ver _combo_arrow_path).
+    Antes las flechas del spinbox salían como puntitos nativos, distintas en cada plataforma. Devuelve
+    ("","") si no pudo escribir (fail-safe: entonces Qt pone sus flechas)."""
+    global _SPIN_ARROWS
+    if _SPIN_ARROWS is not None:
+        return _SPIN_ARROWS
+    out = {}
+    _uid = getattr(os, "getuid", lambda: os.environ.get("USERNAME", "u"))()
+    for key, d in (("up", "M1 5 L5 1 L9 5"), ("down", "M1 1 L5 5 L9 1")):
+        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="6" viewBox="0 0 10 6">'
+               f'<path d="{d}" fill="none" stroke="{MUTED}" stroke-width="1.6" '
+               f'stroke-linecap="round" stroke-linejoin="round"/></svg>').encode()
+        try:
+            p = Path(tempfile.gettempdir()) / f"cinemafilmak-spin-{key}-{_uid}.svg"
+            if not p.exists() or p.read_bytes() != svg:
+                p.write_bytes(svg)
+            out[key] = str(p).replace("\\", "/")
+        except Exception:  # noqa: BLE001
+            out[key] = ""
+    _SPIN_ARROWS = (out["up"], out["down"])
+    return _SPIN_ARROWS
+
+
 def combo(accent):
     """QComboBox CANÓNICO (decidido con Alex, 31 ago 2026): fondo INPUT azulado (marca que es un campo),
-    radio 8, hover = BORDE CORAL (coherente con todo), flecha propia. Popup: selección con TINTE `#2a1210`
-    + TEXTO CORAL (intermedio, ni relleno pleno ni tinte apagado — a juego con el segmentado)."""
+    radio 8, hover = BORDE CORAL (coherente con todo), flecha propia = CHEVRÓN (antes era un cuadradito
+    gris, ver _combo_arrow_path). Popup: selección con TINTE `#2a1210` + TEXTO CORAL (intermedio, ni
+    relleno pleno ni tinte apagado — a juego con el segmentado)."""
+    _ap = _combo_arrow_path()
+    # border:none NO es cosmético: sin él, los border-* de la regla vieja seguirían pintando el
+    # rectángulo gris DETRÁS del chevrón (peor que el cuadrado). Si no hubo temporal, sin flecha propia.
+    arrow = (f"QComboBox::down-arrow{{image:url({_ap});width:10px;height:6px;margin-right:9px;border:none;}}"
+             if _ap else "QComboBox::down-arrow{border:none;}")
     return (f"QComboBox{{background:{INPUT};border:1px solid {LINE};border-radius:8px;padding:5px 10px;color:{TEXT};}}"
             f"QComboBox:hover{{border-color:{accent};}}"
             f"QComboBox:disabled{{color:{MUTED2};border-color:{LINE_SOFT};background:#191a1f;}}"
             f"QComboBox::drop-down{{border:0;width:18px;}}"
-            f"QComboBox::down-arrow{{image:none;border-left:4px solid transparent;"
-            f"border-right:4px solid transparent;border-top:5px solid {MUTED};margin-right:7px;}}"
+            f"{arrow}"
             f"QComboBox QAbstractItemView{{background:{PANEL};border:1px solid {LINE};border-radius:8px;"
             f"padding:3px;outline:none;}}"
             f"QComboBox QAbstractItemView::item{{padding:5px 8px;border-radius:5px;}}"
@@ -126,10 +193,30 @@ def combo(accent):
 def line_edit(accent):
     """Entradas CANÓNICAS (Alex 31 ago): QLineEdit + numéricos (QSpinBox/QDoubleSpinBox) a juego con el combo
     — fondo INPUT azulado, radio 8, foco = BORDE CORAL. El stepper con valor y `+/−` es el `#Step` aparte."""
+    up, dn = _spin_arrow_paths()
+    # Botones ▲▼ del spinbox: por defecto Qt pinta unos puntitos nativos (distintos Mac/Windows). Se
+    # estilizan con la MISMA flecha-imagen SVG del combo (el truco de bordes CSS aquí también saldría
+    # cuadradito). padding-right extra para que el valor no se meta bajo las flechas.
+    spin = ""
+    if up and dn:
+        spin = (
+            "QSpinBox,QDoubleSpinBox{padding-right:20px;}"
+            "QSpinBox::up-button,QDoubleSpinBox::up-button{subcontrol-origin:border;subcontrol-position:top right;"
+            "width:18px;border:0;border-top-right-radius:8px;background:transparent;}"
+            "QSpinBox::down-button,QDoubleSpinBox::down-button{subcontrol-origin:border;subcontrol-position:bottom right;"
+            "width:18px;border:0;border-bottom-right-radius:8px;background:transparent;}"
+            "QSpinBox::up-button:hover,QDoubleSpinBox::up-button:hover,"
+            f"QSpinBox::down-button:hover,QDoubleSpinBox::down-button:hover{{background:{CARD_HI};}}"
+            f"QSpinBox::up-arrow,QDoubleSpinBox::up-arrow{{image:url({up});width:9px;height:6px;}}"
+            f"QSpinBox::down-arrow,QDoubleSpinBox::down-arrow{{image:url({dn});width:9px;height:6px;}}"
+            "QSpinBox::up-arrow:disabled,QDoubleSpinBox::up-arrow:disabled,"
+            "QSpinBox::down-arrow:disabled,QDoubleSpinBox::down-arrow:disabled{image:none;}"
+        )
     return (f"QLineEdit,QSpinBox,QDoubleSpinBox{{background:{INPUT};border:1px solid {LINE};border-radius:8px;"
             f"padding:5px 10px;color:{TEXT};}}"
             f"QLineEdit:focus,QSpinBox:focus,QDoubleSpinBox:focus{{border-color:{accent};}}"
-            f"QLineEdit:disabled,QSpinBox:disabled,QDoubleSpinBox:disabled{{color:{MUTED2};border-color:{LINE_SOFT};background:#191a1f;}}")
+            f"QLineEdit:disabled,QSpinBox:disabled,QDoubleSpinBox:disabled{{color:{MUTED2};border-color:{LINE_SOFT};background:#191a1f;}}"
+            f"{spin}")
 
 
 def scrollbar():
@@ -149,6 +236,9 @@ def scrollbar():
             "QAbstractScrollArea::corner{background:transparent;border:none;}")
 
 
+# ⚠️ El tirador estuvo en 4px de ancho: en macOS el sistema lo dibuja mas generoso y se puede arrastrar, pero
+# en Windows son 4 pixeles literales y NO hay forma de cogerlo con el raton (reportado por Alex).
+# 10px sigue siendo una linea fina y se agarra en las dos.
 def slider(accent, accent2=None):
     """Slider de la familia (volúmenes/faders): barra FINA de 3px + relleno del acento + tirador
     coral CIRCULAR. Decisión de Alex (31 ago): la barra fina calma el acento; el tirador redondo se
@@ -158,7 +248,7 @@ def slider(accent, accent2=None):
     # suite A/V). Barra vertical coral 4×16 con radius 2, margin -7 para centrarla sobre el groove de 3px.
     return (f"QSlider::groove:horizontal{{background:{INPUT};height:3px;border-radius:2px;}}"
             f"QSlider::sub-page:horizontal{{background:{accent};height:3px;border-radius:2px;}}"
-            f"QSlider::handle:horizontal{{background:{accent};width:4px;height:16px;margin:-7px 0;border-radius:2px;}}"
+            f"QSlider::handle:horizontal{{background:{accent};width:10px;height:16px;margin:-7px 0;border-radius:5px;}}"
             f"QSlider::handle:horizontal:hover{{background:{accent2};}}"
             f"QSlider::handle:horizontal:disabled{{background:{LINE};}}"
             f"QSlider::sub-page:horizontal:disabled{{background:{LINE};}}")
@@ -197,12 +287,13 @@ def segmented(accent, accent2=None):
             f"QPushButton#Seg:checked{{background:#2a1210;border-color:{accent};color:{accent2};}}")
 
 
-def small_buttons(accent):
+def small_buttons(accent, accent2=None):
     """Botones utilitarios pequeños (Alex 31 ago): TODOS radio 7 y hover = borde + símbolo coral (unánime).
     El glifo se empuja 2px hacia arriba (`padding-bottom:2`) para centrarlo ópticamente en el cuadrado.
     ⚠️ El empuje va afinado a la fuente del Mac; reverificar en Windows (Segoe UI).
     - `#Step` (+/−) y `#Plus`: cuadrado con fondo CARD.
     - `#IconBtn`: transparente, para iconos y cerrar (la app pone el glifo, p.ej. `×` a 16px)."""
+    accent2 = accent2 or accent
     up = "padding:0 0 2px 0;"
     return (f"QPushButton#Step{{background:{CARD};border:1px solid {LINE};border-radius:7px;color:{TEXT};"
             f"font-size:14px;font-weight:bold;min-width:22px;max-width:22px;min-height:22px;{up}}}"
@@ -213,7 +304,10 @@ def small_buttons(accent):
             f"QPushButton#Plus:hover{{border-color:{accent};color:{accent};}}"
             f"QPushButton#IconBtn{{background:transparent;border:1px solid {LINE};border-radius:7px;"
             f"color:{MUTED2};font-size:16px;min-width:28px;max-width:28px;min-height:28px;{up}}}"
-            f"QPushButton#IconBtn:hover{{border-color:{accent};color:{accent};}}")
+            f"QPushButton#IconBtn:hover{{border-color:{accent};color:{accent};}}"
+            # #IconBtn:checked (para toggles tipo mute de pista) — MISMOS valores que #Seg:checked (11 sep 2026,
+            # peticion de la sesion ComposeR): no inventar un segundo lenguaje de marcado. Tinte coral + acento.
+            f"QPushButton#IconBtn:checked{{background:#2a1210;border-color:{accent};color:{accent2};}}")
 
 
 def checkbox(accent):
@@ -344,6 +438,28 @@ def window():
             f'#Statusbar QLabel{{color:{MUTED};font-family:Menlo,"SF Mono",ui-monospace,monospace;font-size:11px;}}')
 
 
+def splitter():
+    """La "barrita" para arrastrar/redimensionar entre paneles — unificada para TODA la casa: sutil en
+    reposo (filo LINE), y al pasar el ratón se aclara a un **GRIS NEUTRO** (#55565e, el mismo del hover
+    de las scrollbars). ⚠️NO coral: el coral es el acento de ACCIÓN (botones); usarlo en el hover de un
+    gutter/chrome grita y compite con la acción (decisión de Alex 26 sep, ver [[design-house-style]]).
+    La afordancia de "arrastrable" la da el aclarado neutro, no el color de marca. Cubre las DOS mecánicas:
+    - `QSplitter::handle` (apps con QSplitter; la ANCHURA la pone la app con `setHandleWidth(4-6)`).
+    - `QMainWindow::separator` (apps con QDockWidgets, p.ej. LiveMixR; fijamos 5px para que sea agarrable,
+      porque por defecto es de ~1px e invisible en Mac).
+    + el filo fino de cada `QDockWidget` (pedido de Alex) para ver dónde empieza/acaba cada panel."""
+    HOVER, PRESS = "#55565e", "#6a6b73"     # grises neutros; iguales al chrome de las scrollbars
+    return (f"QSplitter::handle{{background:{LINE};}}"
+            f"QSplitter::handle:hover{{background:{HOVER};}}"
+            f"QSplitter::handle:pressed{{background:{PRESS};}}"
+            f"QSplitter::handle:disabled{{background:{LINE_SOFT};}}"
+            f"QMainWindow::separator{{background:{LINE};width:5px;height:5px;}}"
+            f"QMainWindow::separator:hover{{background:{HOVER};}}"
+            f"QMainWindow::separator:pressed{{background:{PRESS};}}"
+            f"QMainWindow::separator:disabled{{background:{LINE_SOFT};}}"
+            f"QDockWidget{{border:1px solid {LINE};}}")
+
+
 def base_qss(accent, accent2=None):
     """El look COMÚN de la familia en un string: fondo, botones, #Primary, combo, input, checkbox, radio y
     scrollbar. Uso: setStyleSheet(theme.base_qss(ACCENT, ACCENT_2) + tus_extras_propios)."""
@@ -362,5 +478,6 @@ def full_qss(accent, accent2=None):
     return "\n".join([
         base_qss(accent, accent2), ghost(accent), slider(accent, accent2), list_table(accent), overlays(accent),
         card(accent), panel(), divider(), progress(accent), labels(), pill(),
-        small_buttons(accent), chip(accent), filter_chip(accent), segmented(accent, accent2), window(),
+        small_buttons(accent, accent2), chip(accent), filter_chip(accent), segmented(accent, accent2), window(),
+        splitter(),
     ])

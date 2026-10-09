@@ -13,16 +13,73 @@
 #   BUILD_FILE   (opcional, SOLO si hay WIN_SRC_REPO) ruta relativa del fichero con __build__ (p.ej.
 #                "mirror/__init__.py"); activa la guarda de "bump sin empujar" (el CI de Win compila del remoto)
 #   FILE         (opcional) nombre de los FICHEROS hospedados si difiere de APP (launchr: sin espacios)
+#   WIN_FORMAT   (opcional) formato del binario de Windows: "exe" (onefile, POR DEFECTO) o "zip" (onedir).
+#                onedir = la app es una CARPETA (arranque en <1s en vez de ~25s); el updater reemplaza la
+#                carpeta entera (updater_core, rama zip_win). Apps onedir hoy: posthandler, livemixr,
+#                stemsplitter (antes con publish forkeado; unificado aquí 12 sep para que hereden el swap atómico).
 #
 # Origen canónico: launchr (build 2026-08-25k), que estrenó auto-dispatch + verificación de lo servido.
 # Historia: MediaCastR 25a (subida FTP fallida en silencio → manifiesto apuntando al .exe viejo) y el
 # bloqueo de Actions del 25 ago (build en cada push llenó los 500 MB de la cuenta).
 
 FILE="${FILE:-$APP}"                 # apps normales: el fichero se llama como la app; launchr override
+WIN_FORMAT="${WIN_FORMAT:-exe}"      # binario de Windows: exe (onefile, por defecto) | zip (onedir/carpeta)
+case "$WIN_FORMAT" in
+  exe) WIN_FILE="$FILE.exe";         WIN_KEY="exe_win" ;;   # onefile: se sustituye el .exe
+  zip) WIN_FILE="$FILE-Windows.zip"; WIN_KEY="zip_win" ;;   # onedir: se reemplaza la carpeta (updater_core la extrae)
+  *) echo "❌ WIN_FORMAT inválido: '$WIN_FORMAT' (usa exe | zip)"; exit 1 ;;
+esac
+# De dónde baja el binario de Windows que compiló el CI:
+#   artifact (por defecto) → `gh run download -n "$FILE-Windows-$BUILD"` (artifacts de Actions).
+#   release                → `gh release download win-$BUILD` (RELEASE de handoff del repo privado). Para apps
+#                            PESADAS (torch = cientos de MB): los artifacts comparten una cuota de 500 MB en TODA
+#                            la cuenta y llenarla bloquea Actions para todos los repos (pasó 25 ago). Las releases no.
+WIN_SOURCE="${WIN_SOURCE:-artifact}"                 # artifact | release
+WIN_RELEASE_ASSET="${WIN_RELEASE_ASSET:-$FILE-win.zip}"  # (solo release) nombre del asset DENTRO de la release
+WIN_WAIT_ITERS="${WIN_WAIT_ITERS:-30}"               # nº de esperas de 20s por el build de Windows (release/torch: subir a 60)
+RESIGN_ADHOC="${RESIGN_ADHOC:-0}"                    # 1 = re-firmar ad-hoc el .app antes de empaquetar (un smoke-test deja
+                                                     #     caché de Qt dentro → rompe el sello; re-firmar lo arregla)
 PROJ="$(cd "$(dirname "$0")/.." && pwd)"; cd "$PROJ"
 BUILD="$($PY -c "$BUILD_CMD")"
 NOTES="${1:-Build $BUILD}"
+# Las notas van DENTRO del JSON del manifiesto → hay que ESCAPARLAS. Publicando con unas notas que
+# llevaban comillas dobles, StemSplitteR (v0.9) generó un latest.json que NO parseaba: el updater no
+# leía NADA — ni la versión ni el kill-switch. json.dumps las escapa (y añade las comillas → en el
+# heredoc se usa SIN comillas alrededor). Al final se valida que el manifiesto parsea antes de darlo por bueno.
+NOTES_JSON="$($PY -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$NOTES")"
 OUT="$PROJ/dist"; BASEURL="https://apps.cinemafilmak.com/update/$SLUG"
+# KILL-SWITCH (min_version) bakeado en el manifiesto. ⚠️El manifiesto se REESCRIBE ENTERO en cada publish:
+# si aquí no ponemos min_version, el suelo que YA estaba servido DESAPARECE (bug silencioso — publicas, todo
+# verde, y el kill-switch ya no está; lo pilló StemSplitteR 19 sep: le habría resucitado los builds del
+# Roformer mudo en Windows, cuyo suelo estaba puesto justo por eso). Regla: BAJAR/quitar el suelo es un acto
+# EXPLÍCITO, nunca el valor por defecto:
+#   MIN_VERSION="2026-09-10f"  (definida, no vacía) → pone/eleva ese suelo.
+#   MIN_VERSION=""             (definida y vacía)   → quita el suelo A PROPÓSITO.
+#   MIN_VERSION sin definir                          → CONSERVA el min_version que ya sirve el manifiesto.
+if [ -n "${MIN_VERSION+x}" ]; then
+  MIN_VERSION_EFF="$MIN_VERSION"
+else
+  # Conservar el min_version servido, pero DISTINGUIENDO "no hay suelo" de "no pude leerlo": quitar un
+  # kill-switch NUNCA debe pasar por accidente (aviso StemSplitteR, 19 sep). 200 → parsear (JSON corrupto =
+  # ABORTAR: no sé si había suelo). 404 → primer publish, sin manifiesto → sin suelo (legítimo). Cualquier
+  # otro (5xx / timeout / red caída = 000) → ABORTAR: fallar ruidoso, no borrar el suelo por un corte de red.
+  _mf="$(mktemp)"
+  _code="$(curl -sL --max-time 20 -o "$_mf" -w '%{http_code}' "$BASEURL/latest.json?nc=$$" 2>/dev/null)" || _code="000"
+  if [ "$_code" = "200" ]; then
+    MIN_VERSION_EFF="$($PY -c 'import json,sys
+try:
+    print(json.load(open(sys.argv[1])).get("min_version","") or ""); sys.exit(0)
+except Exception:
+    sys.exit(3)' "$_mf" 2>/dev/null)" || { rm -f "$_mf"; echo "❌ NO publico: el manifiesto servido no parsea; no puedo saber si llevaba kill-switch. Pasa MIN_VERSION a mano (o MIN_VERSION=\"\" para quitarlo a propósito)."; exit 1; }
+    [ -n "$MIN_VERSION_EFF" ] && echo "  · kill-switch conservado del manifiesto servido: min_version=$MIN_VERSION_EFF"
+  elif [ "$_code" = "404" ]; then
+    MIN_VERSION_EFF=""; echo "  · sin manifiesto servido (404): primer publish, no había kill-switch."
+  else
+    rm -f "$_mf"; echo "❌ NO publico: no pude leer el manifiesto servido (HTTP $_code) para conservar el kill-switch. Reintenta, o pasa MIN_VERSION a mano (MIN_VERSION=\"\" para quitarlo a propósito)."; exit 1
+  fi
+  rm -f "$_mf"
+fi
+MIN_JSON=""; [ -n "$MIN_VERSION_EFF" ] && MIN_JSON=", \"min_version\": \"$MIN_VERSION_EFF\""
 
 [ -d "dist/$APP.app" ] || { echo "No hay 'dist/$APP.app' — constrúyelo antes (pyinstaller tu .spec)."; exit 1; }
 
@@ -113,6 +170,26 @@ servido_ok() {  # $1 ruta remota, $2 sha esperado -> 0 si lo que SIRVE la web co
   real="$(curl -s "https://apps.cinemafilmak.com/$1?x=$$" | shasum -a 256 | awk '{print $1}')"
   [ "$real" = "$2" ]
 }
+swap() {  # $1 ruta remota REAL -> renombra $1.new SOBRE $1 (atomico server-side; Infomaniak soporta RNFR/RNTO-over). Reintenta.
+  local dir code=""
+  dir="$(dirname "$1")"
+  for intento in 1 2 3; do
+    code="$(curl -s --ssl-reqd --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_HOST/$dir/" -Q "RNFR /$1.new" -Q "RNTO /$1" -o /dev/null -w "%{http_code}")"
+    case "$code" in 2*) return 0;; esac
+    sleep 2
+  done
+  return 1
+}
+
+# Re-firma ad-hoc opcional (RESIGN_ADHOC=1): el sello ad-hoc se rompe si algo toca el bundle tras
+# firmarlo (lanzar la app en un smoke-test deja caché de Qt dentro). Re-firmar y verificar, o macOS lo
+# marca «dañado» al bajarlo. Solo si la app lo pide (por defecto no, para no cambiar el flujo de las demás).
+if [ "$RESIGN_ADHOC" = "1" ]; then
+  codesign --force --deep --sign - "dist/$APP.app" >/dev/null 2>&1
+  codesign --verify --deep --strict "dist/$APP.app" >/dev/null 2>&1 \
+    && echo "  ✅ sello ad-hoc íntegro tras re-firmar" \
+    || { echo "  ❌ el sello sigue roto tras re-firmar — abortando"; exit 1; }
+fi
 
 # Puerta obligatoria: un .app con enlaces rotos se instala DAÑADO en cualquier otro equipo — y el hub
 # se niega a instalarlo. (MediaCastR 2026-08-22d, MirroR 2026-08-25f.)
@@ -125,67 +202,110 @@ ditto -c -k --sequesterRsrc --keepParent "dist/$APP.app" "$OUT/$FILE.zip"
 ZIP_SHA="$(shasum -a 256 "$OUT/$FILE.zip" | awk '{print $1}')"
 ZIP_SIG="$(sign "$APP|$BUILD|mac|$ZIP_SHA")"
 
-# Windows: baja el .exe que compiló CI para ESTE build (artifact), lo firma y lo hospeda.
+# Windows: baja el binario que compiló CI para ESTE build (artifact), lo firma y lo hospeda.
+# Según WIN_FORMAT, el fichero es $FILE.exe (onefile) o $FILE-Windows.zip (onedir/carpeta).
 EXE_JSON=""
 if [ -n "$WIN_SRC_REPO" ]; then
   WINDIR="$OUT/win-artifact"; rm -rf "$WINDIR"; mkdir -p "$WINDIR"
+  # win_fetch: intenta traer el binario de Windows para ESTE build al $WINDIR. Dos fuentes (WIN_SOURCE).
+  win_fetch() {
+    if [ "$WIN_SOURCE" = "release" ]; then
+      gh release download "win-$BUILD" --repo "$WIN_SRC_REPO" --dir "$WINDIR" --clobber 2>/dev/null
+    else
+      gh run download --repo "$WIN_SRC_REPO" -n "$FILE-Windows-$BUILD" -D "$WINDIR" 2>/dev/null
+    fi
+  }
+  # win_asset: el fichero recién bajado que nos interesa. En 'release' el asset se llama $WIN_RELEASE_ASSET
+  # (p.ej. StemSplitteR-win.zip) y lo hospedamos como $WIN_FILE; en 'artifact' ya viene como $WIN_FILE.
+  win_asset() { /usr/bin/find "$WINDIR" -name "$([ "$WIN_SOURCE" = release ] && echo "$WIN_RELEASE_ASSET" || echo "$WIN_FILE")" 2>/dev/null | head -1; }
   # Ya NO se compila en cada push (llenaba el almacenamiento de Actions de TODA la cuenta): si no hay
-  # .exe para este build, se pide ahora (workflow_dispatch) y se espera. Único momento en que hace falta.
-  if ! gh run download --repo "$WIN_SRC_REPO" -n "$FILE-Windows-$BUILD" -D "$WINDIR" 2>/dev/null; then
-    echo "  No hay .exe para $BUILD: lanzando el build de Windows…"
+  # binario para este build, se pide ahora (workflow_dispatch) y se espera. Único momento en que hace falta.
+  if ! win_fetch; then
+    echo "  No hay binario de Windows para $BUILD: lanzando el build…"
     if gh workflow run windows-build.yml --repo "$WIN_SRC_REPO" >/dev/null 2>&1; then
-      for _ in $(seq 1 30); do
+      for _ in $(seq 1 "$WIN_WAIT_ITERS"); do
         sleep 20
-        gh run download --repo "$WIN_SRC_REPO" -n "$FILE-Windows-$BUILD" -D "$WINDIR" 2>/dev/null && break
+        win_fetch && break
       done
     fi
   fi
-  if [ -n "$(ls -A "$WINDIR" 2>/dev/null)" ]; then
-    EXE="$(/usr/bin/find "$WINDIR" -name "$FILE.exe" | head -1)"
-    if [ -n "$EXE" ] && [ -f "$EXE" ]; then
-      cp "$EXE" "$OUT/$FILE.exe"
-      EXE_SHA="$(shasum -a 256 "$OUT/$FILE.exe" | awk '{print $1}')"
-      EXE_SIG="$(sign "$APP|$BUILD|win|$EXE_SHA")"
-      echo "  Win .exe    → /update $(upload "$OUT/$FILE.exe" "update/$SLUG/$FILE.exe")  /dl $(upload "$OUT/$FILE.exe" "dl/$SLUG/$FILE.exe")"
-      EXE_JSON=", \"exe_win\": \"$BASEURL/$FILE.exe\", \"sha256_win\": \"$EXE_SHA\", \"sig_win\": \"$EXE_SIG\""
-      HAY_EXE=1
-    fi
-  else
-    # ⚠️ NO degradar a solo-Mac por las bravas en una app que YA publica Windows. No es que Windows quede
-    # «Unavailable»: es que el cliente Windows CASCA. `updater_core._apply_windows` hace
-    # `raise RuntimeError("no-windows-build")` si el manifiesto no trae `exe_win`, así que a quien tenga la
-    # versión anterior le sale la actualización, la acepta y le revienta con un error. Comprobado en MediaCastR.
-    # Publicar a medias es peor que no publicar: se aborta y no se toca el manifiesto que hay servido.
-    echo "  ❌ sin artifact de Windows para $BUILD y esta app publica Windows."
-    echo "     Abortado SIN tocar el portal: un manifiesto sin 'exe_win' hace cascar al updater de Windows."
-    echo "     Arregla el build de Windows y repite. Si de verdad quieres publicar solo Mac: PUBLISH_MAC_ONLY=1"
+  EXE="$(win_asset)"
+  if [ -n "$EXE" ] && [ -f "$EXE" ]; then
+    cp "$EXE" "$OUT/$WIN_FILE"
+    EXE_SHA="$(shasum -a 256 "$OUT/$WIN_FILE" | awk '{print $1}')"
+    EXE_SIG="$(sign "$APP|$BUILD|win|$EXE_SHA")"
+    echo "  Win $WIN_FORMAT    → /update $(upload "$OUT/$WIN_FILE" "update/$SLUG/$WIN_FILE.new")  /dl $(upload "$OUT/$WIN_FILE" "dl/$SLUG/$WIN_FILE.new")"
+    EXE_JSON=", \"$WIN_KEY\": \"$BASEURL/$WIN_FILE\", \"sha256_win\": \"$EXE_SHA\", \"sig_win\": \"$EXE_SIG\""
+    HAY_EXE=1
+  fi
+  # ⚠️ NO degradar a solo-Mac por las bravas en una app que YA publica Windows. No es que Windows quede
+  # «Unavailable»: es que el cliente Windows CASCA. `updater_core._apply_windows` hace
+  # `raise RuntimeError("no-windows-build")` si el manifiesto no trae exe_win/zip_win, así que a quien tenga
+  # la versión anterior le sale la actualización, la acepta y le revienta con un error. Comprobado en MediaCastR.
+  # Cubre los DOS casos: artifact vacío, y artifact con OTRO formato del esperado ($WIN_FILE no está dentro —
+  # p.ej. CI aún en onefile y aquí WIN_FORMAT=zip). Publicar a medias es peor que no publicar.
+  if [ -z "${HAY_EXE:-}" ]; then
+    echo "  ❌ sin binario de Windows válido ($WIN_FILE) para $BUILD y esta app publica Windows."
+    echo "     Abortado SIN tocar el portal: un manifiesto sin $WIN_KEY hace cascar al updater de Windows."
+    echo "     Revisa que el CI produzca $WIN_FILE (WIN_FORMAT=$WIN_FORMAT). Solo Mac a propósito: PUBLISH_MAC_ONLY=1"
     [ "${PUBLISH_MAC_ONLY:-0}" = "1" ] || exit 1
     echo "     PUBLISH_MAC_ONLY=1 → sigo, bajo tu responsabilidad."
   fi
 fi
 
-echo "  Mac .zip    → /update $(upload "$OUT/$FILE.zip" "update/$SLUG/$FILE.zip")  /dl $(upload "$OUT/$FILE.zip" "dl/$SLUG/$FILE.zip")"
+echo "  Mac .zip    → /update $(upload "$OUT/$FILE.zip" "update/$SLUG/$FILE.zip.new")  /dl $(upload "$OUT/$FILE.zip" "dl/$SLUG/$FILE.zip.new")"
 
 # Comprobar lo que SIRVE la web ANTES de publicar el manifiesto: si una subida falló en silencio,
 # el latest.json no llega a apuntar a un fichero que no existe o que es el viejo (bloquearía a TODOS
 # los usuarios, porque el updater verifica el sha).
 echo "Verificando lo que sirve la web…"
 FALLOS=0
-for RUTA in "update/$SLUG/$FILE.zip" "dl/$SLUG/$FILE.zip"; do
+for RUTA in "update/$SLUG/$FILE.zip.new" "dl/$SLUG/$FILE.zip.new"; do
   if servido_ok "$RUTA" "$ZIP_SHA"; then echo "  ✅ $RUTA"; else echo "  ❌ $RUTA no coincide"; FALLOS=$((FALLOS+1)); fi
 done
 if [ -n "${HAY_EXE:-}" ]; then
-  for RUTA in "update/$SLUG/$FILE.exe" "dl/$SLUG/$FILE.exe"; do
+  for RUTA in "update/$SLUG/$WIN_FILE.new" "dl/$SLUG/$WIN_FILE.new"; do
     if servido_ok "$RUTA" "$EXE_SHA"; then echo "  ✅ $RUTA"; else echo "  ❌ $RUTA no coincide"; FALLOS=$((FALLOS+1)); fi
   done
 fi
-[ "$FALLOS" -eq 0 ] || { echo "❌ NO publico el manifiesto: $FALLOS fichero(s) mal subidos. Repite el publish."; exit 1; }
+[ "$FALLOS" -eq 0 ] || {
+  echo "❌ NO publico el manifiesto: $FALLOS fichero(s) mal subidos (lo servido sigue siendo lo anterior, coherente)."
+  echo "   ⚠️ Antes de repetir, MIRA la conexión: si el FTP devuelve 227 (entrar en pasivo) y NUNCA 226"
+  echo "      (transferencia completa), o hasta un fichero de 20 bytes falla, la RED está bloqueando/cortando"
+  echo "      el canal de datos del FTP (pasa con el wifi de Tartanga) — repetir desde ahí no arregla nada."
+  echo "      Y por datos móviles suele ir a ~25 KB/s (una publicación normal = horas). Publica desde otra red."
+  exit 1
+}
+
+# Todo verificado en .new (los ficheros VIVOS no se han tocado). Swap atomico .new -> definitivo, y solo
+# entonces el manifiesto. Si algo hubiera fallado arriba, lo servido seguia intacto y coherente con su manifiesto:
+# se acabo la ventana en la que un usuario baja el binario NUEVO con el manifiesto VIEJO (sha desparejado ->
+# "checksum mismatch"). Rompio MediaDriveR 11g.
+echo "Intercambiando (.new → definitivo, atomico)…"
+for RUTA in "update/$SLUG/$FILE.zip" "dl/$SLUG/$FILE.zip"; do
+  swap "$RUTA" || { echo "❌ swap fallo en $RUTA — lo servido sigue siendo lo anterior (coherente). Repite el publish."; exit 1; }
+done
+if [ -n "${HAY_EXE:-}" ]; then
+  for RUTA in "update/$SLUG/$WIN_FILE" "dl/$SLUG/$WIN_FILE"; do
+    swap "$RUTA" || { echo "❌ swap fallo en $RUTA. Repite el publish."; exit 1; }
+  done
+fi
 
 cat > "$OUT/latest.json" <<JSON
-{"build": "$BUILD", "zip": "$BASEURL/$FILE.zip", "sha256": "$ZIP_SHA", "sig": "$ZIP_SIG"$EXE_JSON, "notes": "$NOTES"}
+{"build": "$BUILD", "zip": "$BASEURL/$FILE.zip", "sha256": "$ZIP_SHA", "sig": "$ZIP_SIG"$EXE_JSON$MIN_JSON, "notes": $NOTES_JSON}
 JSON
+# Validar que el manifiesto PARSEA antes de publicarlo: si no, el updater no leería nada (ni versión ni
+# kill-switch) y bloquearía a todos. Fail-closed. (Lo que cazó las notas con comillas de StemSplitteR.)
+$PY -m json.tool "$OUT/latest.json" >/dev/null 2>&1 || {
+  echo "❌ NO publico: el latest.json generado no es JSON válido. Revisa las notas."; cat "$OUT/latest.json"; exit 1; }
 echo "  latest.json → /update $(upload "$OUT/latest.json" "update/$SLUG/latest.json")"
-BUILD_SERVIDO="$(curl -s "$BASEURL/latest.json?x=$$" | sed -n 's/.*"build": *"\([^"]*\)".*/\1/p')"
-[ "$BUILD_SERVIDO" = "$BUILD" ] || { echo "❌ el manifiesto servido dice '$BUILD_SERVIDO' y no '$BUILD'. Repite."; exit 1; }
+# Verificar lo SERVIDO parseándolo (como el cliente), NO con sed: un manifiesto roto contiene igual la
+# cadena "build" y el gate por sed lo daba por bueno mientras el updater no podía leer nada. De paso,
+# si pedimos kill-switch, comprobar que el manifiesto servido REALMENTE lo lleva.
+SERVIDO="$(curl -s "$BASEURL/latest.json?x=$$" | $PY -c 'import json,sys; d=json.load(sys.stdin); print(d["build"], d.get("min_version",""))' 2>/dev/null)" \
+  || { echo "❌ el manifiesto servido no parsea como JSON. Repite."; exit 1; }
+[ "${SERVIDO%% *}" = "$BUILD" ] || { echo "❌ el manifiesto servido dice '${SERVIDO%% *}' y no '$BUILD'. Repite."; exit 1; }
+[ -z "$MIN_VERSION_EFF" ] || [ "${SERVIDO##* }" = "$MIN_VERSION_EFF" ] \
+  || { echo "❌ el suelo kill-switch $MIN_VERSION_EFF (puesto o conservado) no está en el manifiesto servido. Repite."; exit 1; }
 echo "✅ Publicado $APP $BUILD (firmado) en /update/ y /dl/."
 echo "   Recuerda: una línea arriba del todo en missioncontrol/RELEASES.md (es donde MC se entera)."

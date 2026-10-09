@@ -75,12 +75,48 @@ def _fresh(url: str) -> str:
     return url + ("&" if "?" in url else "?") + "nocache=" + str(int(time.time()))
 
 
+_SSL_CTX_CACHE: "ssl.SSLContext | None" = None
+
+
 def _ssl_ctx() -> ssl.SSLContext:
+    """Contexto TLS que confía en certifi (nuestro bundle) Y en el almacén del SISTEMA.
+
+    Lo segundo es la diferencia con el navegador: un antivirus / filtro web / proxy corporativo
+    INTERCEPTA el HTTPS con su PROPIO certificado, cuyo root está en el llavero del sistema (Safari y
+    curl lo aceptan) pero NO en certifi. Sin esto, el catálogo del launcher y el updater de cualquier app
+    fallan con `CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate` en cuanto hay un
+    antivirus así (le pasó al Mac de Bea, 14 sep 2026). Es SEGURO confiar también en el store del sistema:
+    los binarios que se instalan/actualizan se verifican APARTE con firma Ed25519 (`_verify_sig`), así que
+    un HTTPS interceptado no permite colar una app manipulada. Se construye una vez (caché de proceso)."""
+    global _SSL_CTX_CACHE
+    if _SSL_CTX_CACHE is not None:
+        return _SSL_CTX_CACHE
     try:
         import certifi
-        return ssl.create_default_context(cafile=certifi.where())
+        ctx = ssl.create_default_context(cafile=certifi.where())
     except Exception:  # noqa: BLE001
-        return ssl.create_default_context()
+        ctx = ssl.create_default_context()
+    try:
+        if sys.platform == "darwin":
+            # Añadir los certificados del llavero (roots de Apple + los que instaló el antivirus/filtro).
+            for _args in (["/usr/bin/security", "find-certificate", "-a", "-p"],
+                          ["/usr/bin/security", "find-certificate", "-a", "-p",
+                           "/System/Library/Keychains/SystemRootCertificates.keychain"]):
+                try:
+                    pem = subprocess.run(_args, capture_output=True, text=True, timeout=10).stdout
+                    if pem and "BEGIN CERTIFICATE" in pem:
+                        ctx.load_verify_locations(cadata=pem)
+                except Exception:  # noqa: BLE001
+                    pass
+        elif sys.platform.startswith("win"):
+            try:
+                ctx.load_default_certs()   # en Windows incluye el store del sistema (mismo caso con AV)
+            except Exception:  # noqa: BLE001
+                pass
+    except Exception:  # noqa: BLE001
+        pass
+    _SSL_CTX_CACHE = ctx
+    return ctx
 
 
 @contextlib.contextmanager

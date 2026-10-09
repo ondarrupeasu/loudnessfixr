@@ -71,6 +71,31 @@ class _ApplyWorker(QThread):
             self.failed.emit(str(e))
 
 
+def _launch_beacon(updater) -> None:
+    """Cuenta ANÓNIMA de aperturas para el panel (panel.cinemafilmak.com/px): sin cookies, sin IP, sin
+    user-agent identificable — solo un contador por app y día. Fire-and-forget en un hilo daemon: no bloquea
+    el arranque ni falla si no hay red. El slug sale del manifest_url (o del app_name en minúsculas). Se
+    llama UNA vez, al arrancar automáticamente (no en el 'buscar updates' manual, para no contar de más)."""
+    try:
+        url = getattr(updater.cfg, "manifest_url", "") or ""
+        slug = url.rstrip("/").split("/")[-2] if "/update/" in url else (getattr(updater.cfg, "app_name", "") or "").lower()
+        if not slug:
+            return
+        ua = getattr(updater.cfg, "user_agent", "") or "cf-app"
+
+        def _hit():
+            try:
+                from urllib.request import Request, urlopen
+                urlopen(Request(f"https://panel.cinemafilmak.com/px?s={slug}&e=launch",
+                                headers={"User-Agent": ua}), timeout=5).read()
+            except Exception:
+                pass
+        import threading
+        threading.Thread(target=_hit, daemon=True).start()
+    except Exception:
+        pass
+
+
 def check_and_prompt(parent, updater: Updater, notify_none: bool = False) -> None:
     """Lanza la comprobación de updates en segundo plano. No bloquea.
     - Automático al arrancar (notify_none=False): solo si la app está empaquetada; silencioso si estás al día.
@@ -82,6 +107,8 @@ def check_and_prompt(parent, updater: Updater, notify_none: bool = False) -> Non
             pass
     if not notify_none and not bool(getattr(sys, "frozen", False)):
         return
+    if not notify_none:
+        _launch_beacon(updater)   # panel: cuenta ANÓNIMA de aperturas (fire-and-forget, no bloquea)
     updater.cleanup_windows_backup()   # limpia un <App>.old.exe que dejara una actualización previa (Windows)
     # 0) GATE DE CADUCIDAD (lease) — SÍNCRONO y offline-proof. Si la versión ha caducado y no se puede
     # renovar (sin internet, o sin build/licencia nueva) → bloquea y cierra. Rápido si NO ha caducado
