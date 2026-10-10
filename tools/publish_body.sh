@@ -208,25 +208,49 @@ EXE_JSON=""
 if [ -n "$WIN_SRC_REPO" ]; then
   WINDIR="$OUT/win-artifact"; rm -rf "$WINDIR"; mkdir -p "$WINDIR"
   # win_fetch: intenta traer el binario de Windows para ESTE build al $WINDIR. Dos fuentes (WIN_SOURCE).
+  # Devuelve 0 = bajado · 1 = NO EXISTE todavía (hay que compilarlo) · 2 = la descarga FALLÓ por otra cosa
+  # (disco lleno, red…). ⚠️Distinguirlos es lo importante (MediaDriveR 10-oct): con el disco lleno, `gh run
+  # download` se cortaba a los 17 MB, el error se tragaba (2>/dev/null) y el script lo tomaba por "no hay
+  # binario" → relanzaba el CI en bucle. Un fallo de descarga NO se arregla compilando otra vez: se para.
+  WIN_FETCH_ERR=""
   win_fetch() {
+    local _err _rc
     if [ "$WIN_SOURCE" = "release" ]; then
-      gh release download "win-$BUILD" --repo "$WIN_SRC_REPO" --dir "$WINDIR" --clobber 2>/dev/null
+      _err="$(gh release download "win-$BUILD" --repo "$WIN_SRC_REPO" --dir "$WINDIR" --clobber 2>&1 >/dev/null)" && return 0
     else
-      gh run download --repo "$WIN_SRC_REPO" -n "$FILE-Windows-$BUILD" -D "$WINDIR" 2>/dev/null
+      _err="$(gh run download --repo "$WIN_SRC_REPO" -n "$FILE-Windows-$BUILD" -D "$WINDIR" 2>&1 >/dev/null)" && return 0
     fi
+    case "$_err" in
+      *"no valid artifacts"*|*"no artifacts"*|*"release not found"*) return 1 ;;
+    esac
+    WIN_FETCH_ERR="$_err"; return 2
   }
+  win_fetch_fatal() {
+    echo "❌ NO publico: la descarga del binario de Windows ha FALLADO (no es que no exista). ¿Disco lleno? ¿Red?"
+    echo "   $WIN_FETCH_ERR" | head -3
+    echo "   Libera espacio / reintenta. NO se relanza el CI: el binario probablemente ya está compilado."
+    exit 1
+  }
+  # La compilación se pide en la RAMA de la app, no en la por defecto del repo: MediaDriveR (fix/…) y PostHandleR
+  # (viewer-pyav-poc) publican desde ramas que NO son main, y sin --ref el CI compilaba main (código viejo).
+  WIN_REF="${WIN_REF:-$(git -C "$PROJ" branch --show-current 2>/dev/null)}"
   # win_asset: el fichero recién bajado que nos interesa. En 'release' el asset se llama $WIN_RELEASE_ASSET
   # (p.ej. StemSplitteR-win.zip) y lo hospedamos como $WIN_FILE; en 'artifact' ya viene como $WIN_FILE.
   win_asset() { /usr/bin/find "$WINDIR" -name "$([ "$WIN_SOURCE" = release ] && echo "$WIN_RELEASE_ASSET" || echo "$WIN_FILE")" 2>/dev/null | head -1; }
   # Ya NO se compila en cada push (llenaba el almacenamiento de Actions de TODA la cuenta): si no hay
   # binario para este build, se pide ahora (workflow_dispatch) y se espera. Único momento en que hace falta.
-  if ! win_fetch; then
-    echo "  No hay binario de Windows para $BUILD: lanzando el build…"
-    if gh workflow run windows-build.yml --repo "$WIN_SRC_REPO" >/dev/null 2>&1; then
+  win_fetch && _wf=0 || _wf=$?          # (sin `set -e` saltando: el 1 y el 2 se tratan aquí)
+  [ "$_wf" = 2 ] && win_fetch_fatal
+  if [ "$_wf" = 1 ]; then
+    echo "  No hay binario de Windows para $BUILD: lanzando el build en la rama «${WIN_REF:-por defecto}»…"
+    if gh workflow run windows-build.yml --repo "$WIN_SRC_REPO" ${WIN_REF:+--ref "$WIN_REF"} >/dev/null 2>&1; then
       for _ in $(seq 1 "$WIN_WAIT_ITERS"); do
         sleep 20
-        win_fetch && break
+        win_fetch && { _wf=0; break; } || _wf=$?
+        [ "$_wf" = 2 ] && win_fetch_fatal
       done
+    else
+      echo "  ⚠️ No se pudo lanzar el CI en la rama «$WIN_REF» (¿no está empujada?)."
     fi
   fi
   EXE="$(win_asset)"
