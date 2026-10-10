@@ -5,6 +5,9 @@
 # saltas el build (o falla), el `.app` de la vez anterior sobrevive en dist/ y `publish_infomaniak.sh` lo
 # empaqueta con el manifiesto NUEVO → el launcher instala, la app se reporta vieja y ofrece update en bucle.
 # (Ver missioncontrol/briefs/PUBLISH_STALE_BINARY.md.)
+# Caché de PyInstaller PROPIA de esta app: la común (~/Library/Application Support/pyinstaller) la comparten
+# todas las apps y dos builds a la vez (varias sesiones) la corrompen → SyntaxError en index.dat. 9-oct-2026.
+export PYINSTALLER_CONFIG_DIR="${PYINSTALLER_CONFIG_DIR:-$HOME/Library/Caches/pyinstaller-loudnessfixr}"
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # `venv/bin/python -m …` en vez de los wrappers pip/pyinstaller (evita shebangs viejos tras renames).
