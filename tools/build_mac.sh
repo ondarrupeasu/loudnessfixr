@@ -12,7 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # `venv/bin/python -m …` en vez de los wrappers pip/pyinstaller (evita shebangs viejos tras renames).
 [ -d venv ] || { python3 -m venv venv; venv/bin/python -m pip install -q -r requirements.txt; }
-venv/bin/python -m pip install -q pyinstaller
+venv/bin/python -m pip install -q pyinstaller==6.20.0
 rm -rf build dist
 venv/bin/python -m PyInstaller --noconfirm LoudnessFixR.spec
 # Re-firma ad-hoc: PyInstaller a veces deja el sello inválido ("a sealed resource is missing or invalid") y
